@@ -9,6 +9,8 @@
 #include "FontAwesom6.h"
 #include <iomanip>
 #include <ctime>
+#include <algorithm>
+#include <array>
 
 Application* Application::instance = nullptr;
 
@@ -267,59 +269,59 @@ void Application::Run() {
 
 	uint64_t fpsCounter = 0;
 
-	bool setup_recording = true;
 	int* cpu_side_buffer = nullptr;
 
 	int ffmpeg_frames_to_write = 0;
 	int ffmpeg_frame_counter = 0;
 
 	FILE* ffmpeg = nullptr;
-	// TODO: make this dynamic
-	recording_time = 5.0f;
 	recording = false;
 	glm::vec2 last_preview_size = {};
 
 	bool take_picture = false;
-	bool setup_picture = true;
-
-	glm::vec2 picture_resolution = {};
 
 	bool take_picture_imgui = false;
 	bool record_imgui = false;
 
-	static int selected_video_resolution = 2;
-	static int selected_video_frame_rate = 2;
-	static int selected_picture_resolution = 2;
-	const char* resolutions[6] = {
+	int resolution_index = 2;
+	int frame_rate_index = 2;
+
+	constexpr std::array<const char*, 7> resolution_strings = {
 		"480p	SD",
 		"720p	HD",
 		"1080p	FHD",
 		"1440p	QHD (2K)",
 		"2160p	UHD (4K)",
 		"4320p	FUHD (8K)",
+		"Custom",
 	};
-	const char* video_frame_rate[6] = {
+
+	constexpr std::array<const char*, 4> frame_rate_strings = {
 		"24",
 		"30",
 		"60",
-		"144",
-		"165",
-		"240",
+		"Custom",
 	};
 
-	int framerates[6] = { 24, 30, 60, 144, 165, 240 };
+	constexpr std::array<int, 3> frame_rates = { 24, 30, 60 };
 
-	glm::vec2 resolutions_vec2[6] = {
-		{640, 480},
-		{1280, 720},
-		{1920, 1080},
-		{2560, 1440},
-		{3840, 2160},
-		{7680, 4320}
+	constexpr std::array<glm::ivec2, 6> resolutions = {
+		glm::ivec2{640, 480},
+		glm::ivec2{1280, 720},
+		glm::ivec2{1920, 1080},
+		glm::ivec2{2560, 1440},
+		glm::ivec2{3840, 2160},
+		glm::ivec2{7680, 4320}
 	};
+
+	static_assert (resolutions.size() == (resolution_strings.size() - 1));
+	static_assert (frame_rates.size() == (frame_rate_strings.size() - 1));
+
+	glm::ivec2 selected_resolution = resolutions[resolution_index];
+	int selected_frame_rate = frame_rates[frame_rate_index];
 
 	int recording_time_minutes = 0;
-	int recording_time_seconds = 0;
+	int recording_time_seconds = 10;
 
 	bool want_exit = false;
 
@@ -349,143 +351,85 @@ void Application::Run() {
 		// TODO: have a mode where we can only see the output of the selected pass and its input pass and so on
 		// that way we can see per pass progress and also for performance reasons too
 
-		if (preview_resized) {
+		if (take_picture || recording)
+		{
+			last_preview_size = preview_size;
+			preview_size = selected_resolution;
+			preview_resized = true;
 
-			for (size_t i = 0; i < passes.size(); i++)
+			int buffer_size = int(selected_resolution.x) * int(selected_resolution.y);
+			cpu_side_buffer = new int[buffer_size];
+
+			auto t = std::time(nullptr);
+			auto tm = *std::localtime(&t);
+
+			if (take_picture)
 			{
-				const auto& pass = passes[i];
-				pass->Resize(int(preview_size.x), int(preview_size.y));
-			}
-			
-			preview_fb->Resize(int(preview_size.x), int(preview_size.y));
-			preview_resized = false;
-		}
-
-		for (size_t i = 0; i < passes.size(); i++)
-		{
-			const auto& pass = passes[i];
-			pass->Draw();
-		}
-
-		if (passes.size() == 1)
-		{
-			selectedRenderPass = passes.back();
-		}
-
-		if (selectedRenderPass && selectedRenderPass->GetOutput())
-		{
-			preview_fb->Bind();
-			glBindTextureUnit(0, selectedRenderPass->GetOutput()->attachments[0].id);
-			preview_shader->Bind();
-			preview_shader->UniformInt("inputColorAttachment", 0);
-			DrawFullScreenQuad();
-		}
-
-		if (take_picture && selectedRenderPass)
-		{
-			if (setup_picture)
-			{
-				setup_picture = false;
-				last_preview_size = preview_size;
-				preview_size = resolutions_vec2[selected_picture_resolution];
-				preview_resized = true;
-
-				if (cpu_side_buffer != nullptr)
-				{
-					delete[] cpu_side_buffer;
-					cpu_side_buffer = nullptr;
-				}
-				cpu_side_buffer = new int[int(preview_size.x) * int(preview_size.y)];
-
-			}
-			else
-			{
-
-				preview_fb->Bind();
-				glReadPixels(0, 0, int(preview_size.x), int(preview_size.y), GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
+				DrawAllPasses();
+				glReadPixels(0, 0, int(selected_resolution.x), int(selected_resolution.y), GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
 				stbi_flip_vertically_on_write(1);
-				
-				auto t = std::time(nullptr);
-				auto tm = *std::localtime(&t);
+
 				std::stringstream name_ss;
-				name_ss << screenshot_output_directory.string() << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S") << ".png";
+				name_ss << screenshot_output_directory.string() << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
+					int(selected_resolution.x) << "x" << int(selected_resolution.y) << "p" << ".png";
 				auto name = name_ss.str();
 
-				if (!stbi_write_png(name.c_str(), int(preview_size.x), int(preview_size.y), 4, cpu_side_buffer, 4 * int(preview_size.x))) 
+				if (!stbi_write_png(name.c_str(), int(selected_resolution.x), int(selected_resolution.y), 4, cpu_side_buffer, 4 * int(selected_resolution.x)))
 				{
 					printf("Failed to write output.png\n");
 				}
 
 				take_picture = false;
-				setup_picture = true;
-				preview_size = last_preview_size;
-				preview_resized = true;
-				if (cpu_side_buffer != nullptr)
-				{
-					delete[] cpu_side_buffer;
-					cpu_side_buffer = nullptr;
-				}			
 			}
-		}
-		else if (recording && selectedRenderPass) 
-		{
-			if (setup_recording)
-			{
-				ffmpeg_frames_to_write = ((recording_time_minutes * 60) + recording_time_seconds) * (framerates[selected_video_frame_rate]);
-				last_preview_size = preview_size;
-				preview_size = resolutions_vec2[selected_video_resolution];
-				preview_resized = true;
 
-				auto t = std::time(nullptr);
-				auto tm = *std::localtime(&t);
+			if (recording)
+			{
+				ffmpeg_frames_to_write = ((recording_time_minutes * 60) + recording_time_seconds) * (selected_frame_rate);
 
 				std::stringstream ss;
-				ss << "ffmpeg_bin\\ffmpeg.exe -an -r " << framerates[selected_video_frame_rate] << " -f rawvideo -pix_fmt rgba -s ";
-				ss << " " << int(preview_size.x) << "x" << int(preview_size.y) << " ";
-				ss << " -i - -c:v hevc_nvenc -y -pix_fmt yuv420p -vf vflip -preset slower ";
-				ss << "\"" << video_output_directory << "Output-" << std::put_time(&tm, "%d-%m-%Y-%H-%M-%S") << ".mp4\"";
+				ss << "ffmpeg_bin\\ffmpeg.exe -benchmark -hide_banner -an -r " << int(selected_frame_rate) << " -f rawvideo -pix_fmt rgba -s ";
+				ss << " " << int(selected_resolution.x) << "x" << int(selected_resolution.y) << " ";
+				ss << " -i - -c:v hevc_nvenc -y -pix_fmt yuv420p -vf vflip -preset losslesshp ";
+				ss << "\"" << video_output_directory << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
+					int(selected_resolution.x) << "x" << int(selected_resolution.y) << "p" << ".mp4\"";
 				std::string cmd = ss.str();
 
 				// open pipe to ffmpeg's stdin in binary write mode
 				ffmpeg = _popen(cmd.c_str(), "wb");
 
-				if (cpu_side_buffer != nullptr)
-				{
-					delete[] cpu_side_buffer;
-					cpu_side_buffer = nullptr;
-				}
-				cpu_side_buffer = new int[int(preview_size.x) * int(preview_size.y)];
-
-				setup_recording = false;
-
 				time = 0;
-			}
-			else
-			{
-				preview_fb->Bind();
-				glReadPixels(0, 0, int(preview_size.x), int(preview_size.y), GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
-				fwrite(cpu_side_buffer, sizeof(int) * int(preview_size.x) * int(preview_size.y), 1, ffmpeg);
-				ffmpeg_frame_counter++;
 
-				if (ffmpeg_frame_counter >= ffmpeg_frames_to_write)
+				glfwSwapInterval(0);
+
+				for (int frame_index = 0; frame_index < ffmpeg_frames_to_write; ++frame_index) 
 				{
-					_pclose(ffmpeg);
-					recording = false;
-					setup_recording = true;
-					ffmpeg_frame_counter = 0;
-					ffmpeg_frames_to_write = 0;
-					preview_size = last_preview_size;
-					preview_resized = true;
-					if (cpu_side_buffer != nullptr)
-					{
-						delete[] cpu_side_buffer;
-						cpu_side_buffer = nullptr;
-					}
+					DrawAllPasses();
+					glReadPixels(0, 0, int(selected_resolution.x), int(selected_resolution.y), GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
+					_fwrite_nolock(cpu_side_buffer, sizeof(int) * buffer_size, 1, ffmpeg);
+					// TODO : add a customizable speed here 
+					time += 1.0f / float(selected_frame_rate);
 				}
+
+				_pclose(ffmpeg);
+				recording = false;
+				ffmpeg_frame_counter = 0;
+				ffmpeg_frames_to_write = 0;
+				frames = 0;
+				time = 0;
+
+				glfwSwapInterval(1);
 			}
+
+			preview_size = last_preview_size;
+			preview_resized = true;
+			delete[] cpu_side_buffer;
+			cpu_side_buffer = nullptr;
 		}
+
 		else
 		{
+			DrawAllPasses();
+
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
@@ -514,12 +458,12 @@ void Application::Run() {
 						time = 0;
 					}
 
-					if (ImGui::MenuItem("Record"))
+					if (ImGui::MenuItem("Record") && selectedRenderPass)
 					{
 						record_imgui = true;
 					}
 
-					if (ImGui::MenuItem("Snap Shot"))
+					if (ImGui::MenuItem("Snap Shot") && selectedRenderPass)
 					{
 						take_picture_imgui = true;
 					}
@@ -557,7 +501,6 @@ void Application::Run() {
 
 					ImGui::EndPopup();
 				}
-
 			}
 
 			if (record_imgui) 
@@ -567,19 +510,36 @@ void Application::Run() {
 				ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 				if (ImGui::BeginPopupModal("RecordDetails", &record_imgui, ImGuiWindowFlags_AlwaysAutoResize))
 				{
-
 					ImGui::TextColored({ 1,0,0,1 }, "Higher Resolution and Higher FPS will take longer");
 					ImGui::InputInt("Minutes", &recording_time_minutes);
 					ImGui::SameLine();
 					ImGui::InputInt("Seconds", &recording_time_seconds);
-					ImGui::Combo("VideoResolution", &selected_video_resolution, resolutions, 6);
+					ImGui::Separator();
+					ImGui::Combo("VideoResolution", &resolution_index, resolution_strings.data(), resolution_strings.size());
 					ImGui::SameLine();
-					ImGui::Combo("VideoFPS", &selected_video_frame_rate, video_frame_rate, 6);
+					ImGui::Combo("VideoFPS", &frame_rate_index, frame_rate_strings.data(), frame_rate_strings.size());
 
-					if (selected_video_resolution == 5) // 8K
+					if (resolution_index == resolution_strings.size() - 1)
 					{
-						ImGui::TextColored({1,0,0,1}, "8K Capture might not be supported by your GPU");
+						ImGui::InputInt("Width", &selected_resolution.x);
+						ImGui::SameLine();
+						ImGui::InputInt("Height", &selected_resolution.y);
 					}
+					else
+					{
+						selected_resolution = resolutions[resolution_index];
+					}
+
+					if (frame_rate_index == frame_rate_strings.size() - 1)
+					{
+						ImGui::InputInt("FPS", &selected_frame_rate);
+					}
+					else
+					{
+						selected_frame_rate = frame_rates[frame_rate_index];
+					}
+
+					ImGui::Separator();
 
 					float button_size = 120;
 					ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x / 2) - (button_size) / 2);
@@ -599,11 +559,19 @@ void Application::Run() {
 				ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 				if (ImGui::BeginPopupModal("SnapShotDetails", &take_picture_imgui, ImGuiWindowFlags_AlwaysAutoResize))
 				{
-					ImGui::Combo("Resolution", &selected_picture_resolution, resolutions, 5);
-					if (selected_picture_resolution == 5) // 8K
+					ImGui::Combo("Resolution", &resolution_index, resolution_strings.data(), resolution_strings.size());
+					if (resolution_index == resolution_strings.size() - 1)
 					{
-						ImGui::TextColored({ 1,0,0,1 }, "8K Capture might not be supported by your GPU");
+						ImGui::InputInt("Width", &selected_resolution.x);
+						ImGui::SameLine();
+						ImGui::InputInt("Height", &selected_resolution.y);
 					}
+					else
+					{
+						selected_resolution = resolutions[resolution_index];
+					}
+
+					ImGui::Separator();
 
 					if (ImGui::Button("Take")) 
 					{
@@ -648,7 +616,6 @@ void Application::Run() {
 				// TODO: make this changeable
 				float seek_speed = 5.0f;
 
-				//			ImGui::SameLine();
 				if (ImGui::Button(ICON_FA_REPEAT)) 
 				{
 					time = 0;
@@ -947,5 +914,40 @@ void Application::DrawFullScreenQuad()
 {
 	glBindVertexArray(quadVao);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+void Application::DrawAllPasses()
+{
+	if (preview_resized) {
+
+		for (size_t i = 0; i < passes.size(); i++)
+		{
+			const auto& pass = passes[i];
+			pass->Resize(int(preview_size.x), int(preview_size.y));
+		}
+
+		preview_fb->Resize(int(preview_size.x), int(preview_size.y));
+		preview_resized = false;
+	}
+
+	for (size_t i = 0; i < passes.size(); i++)
+	{
+		const auto& pass = passes[i];
+		pass->Draw();
+	}
+
+	if (passes.size() == 1)
+	{
+		selectedRenderPass = passes.back();
+	}
+
+	if (selectedRenderPass && selectedRenderPass->GetOutput())
+	{
+		preview_fb->Bind();
+		glBindTextureUnit(0, selectedRenderPass->GetOutput()->attachments[0].id);
+		preview_shader->Bind();
+		preview_shader->UniformInt("inputColorAttachment", 0);
+		DrawFullScreenQuad();
+	}
 }
 

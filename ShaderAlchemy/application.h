@@ -41,7 +41,6 @@ struct Application
 	bool playing{};
 
 	bool recording = true;
-	float recording_time;
 
 	float time{};
 	float dt{};
@@ -72,5 +71,7 @@ struct Application
 
 	void InitQuadVoa();
 	void DrawFullScreenQuad();
+
+	void DrawAllPasses();
 };
 
