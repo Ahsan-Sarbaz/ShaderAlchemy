@@ -322,6 +322,7 @@ void Application::Run() {
 
 	int recording_time_minutes = 0;
 	int recording_time_seconds = 10;
+	float recording_speed = 1.0f;
 
 	bool want_exit = false;
 
@@ -357,7 +358,7 @@ void Application::Run() {
 			preview_size = selected_resolution;
 			preview_resized = true;
 
-			int buffer_size = int(selected_resolution.x) * int(selected_resolution.y);
+			int buffer_size = selected_resolution.x * selected_resolution.y;
 			cpu_side_buffer = new int[buffer_size];
 
 			auto t = std::time(nullptr);
@@ -366,15 +367,15 @@ void Application::Run() {
 			if (take_picture)
 			{
 				DrawAllPasses();
-				glReadPixels(0, 0, int(selected_resolution.x), int(selected_resolution.y), GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
+				glReadPixels(0, 0, selected_resolution.x, selected_resolution.y, GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
 				stbi_flip_vertically_on_write(1);
 
 				std::stringstream name_ss;
 				name_ss << screenshot_output_directory.string() << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
-					int(selected_resolution.x) << "x" << int(selected_resolution.y) << "p" << ".png";
+					selected_resolution.x << "x" << selected_resolution.y << "p" << ".png";
 				auto name = name_ss.str();
 
-				if (!stbi_write_png(name.c_str(), int(selected_resolution.x), int(selected_resolution.y), 4, cpu_side_buffer, 4 * int(selected_resolution.x)))
+				if (!stbi_write_png(name.c_str(), selected_resolution.x, selected_resolution.y, 4, cpu_side_buffer, 4 * selected_resolution.x))
 				{
 					printf("Failed to write output.png\n");
 				}
@@ -387,11 +388,11 @@ void Application::Run() {
 				ffmpeg_frames_to_write = ((recording_time_minutes * 60) + recording_time_seconds) * (selected_frame_rate);
 
 				std::stringstream ss;
-				ss << "ffmpeg_bin\\ffmpeg.exe -benchmark -hide_banner -an -r " << int(selected_frame_rate) << " -f rawvideo -pix_fmt rgba -s ";
-				ss << " " << int(selected_resolution.x) << "x" << int(selected_resolution.y) << " ";
+				ss << "ffmpeg_bin\\ffmpeg.exe -benchmark -hide_banner -an -r " << selected_frame_rate << " -f rawvideo -pix_fmt rgba -s ";
+				ss << " " << selected_resolution.x << "x" << selected_resolution.y << " ";
 				ss << " -i - -c:v hevc_nvenc -y -pix_fmt yuv420p -vf vflip -preset losslesshp ";
 				ss << "\"" << video_output_directory << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
-					int(selected_resolution.x) << "x" << int(selected_resolution.y) << "p" << ".mp4\"";
+					selected_resolution.x << "x" << selected_resolution.y << "p" << ".mp4\"";
 				std::string cmd = ss.str();
 
 				// open pipe to ffmpeg's stdin in binary write mode
@@ -404,10 +405,10 @@ void Application::Run() {
 				for (int frame_index = 0; frame_index < ffmpeg_frames_to_write; ++frame_index) 
 				{
 					DrawAllPasses();
-					glReadPixels(0, 0, int(selected_resolution.x), int(selected_resolution.y), GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
+					glReadPixels(0, 0, selected_resolution.x, selected_resolution.y, GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
 					_fwrite_nolock(cpu_side_buffer, sizeof(int) * buffer_size, 1, ffmpeg);
 					// TODO : add a customizable speed here 
-					time += 1.0f / float(selected_frame_rate);
+					time += (1.0f / float(selected_frame_rate)) * recording_speed;
 				}
 
 				_pclose(ffmpeg);
@@ -488,13 +489,15 @@ void Application::Run() {
 					auto avail = ImGui::GetContentRegionAvail().x;
 					auto x = (avail / 2) - ((ImGui::GetStyle().ItemSpacing.x + button_size + button_size) / 2);
 					ImGui::SetCursorPosX(x);
-					if (ImGui::Button("Yes", ImVec2(button_size, 0))) {
+					if (ImGui::Button("Yes", ImVec2(button_size, 0))) 
+					{
 						running = false;
 					}
 
 					ImGui::SameLine();
 					ImGui::SetItemDefaultFocus();
-					if (ImGui::Button("No", ImVec2(button_size, 0))) {
+					if (ImGui::Button("No", ImVec2(button_size, 0))) 
+					{
 						want_exit = false;
 						ImGui::CloseCurrentPopup();
 					}
@@ -539,6 +542,7 @@ void Application::Run() {
 						selected_frame_rate = frame_rates[frame_rate_index];
 					}
 
+					ImGui::InputFloat("Video Speed", &recording_speed);
 					ImGui::Separator();
 
 					float button_size = 120;
@@ -839,7 +843,8 @@ public:
 
 	virtual void Draw() override
 	{
-		if (shader->IsValid()) {
+		if (shader->IsValid()) 
+		{
 			output->ClearColorAttachments({0, 0, 0, 1.0f});
 			output->Bind();
 			shader->Bind();
@@ -918,7 +923,8 @@ void Application::DrawFullScreenQuad()
 
 void Application::DrawAllPasses()
 {
-	if (preview_resized) {
+	if (preview_resized) 
+	{
 
 		for (size_t i = 0; i < passes.size(); i++)
 		{
