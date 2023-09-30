@@ -28,6 +28,7 @@ struct Framebuffer
 	void Resize(int width, int height);
 
 	void Bind();
+	void BindAttachment(int index, int unit);
 
 	void ClearColorAttachments(const glm::vec4& color);
 	void ClearDepthStencilAttachment(float depth, int stencil);

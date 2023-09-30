@@ -5,7 +5,6 @@
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include <stb_image_write.h>
 #include "FontAwesom6.h"
 #include <iomanip>
 #include <ctime>
@@ -160,9 +159,11 @@ void Application::Init() {
 	glfwSetWindowUserPointer(window, this);
 
 	glfwSetFramebufferSizeCallback(window, [](GLFWwindow* window, int width, int height) {
-		auto app = (Application*)glfwGetWindowUserPointer(window);
-		app->window_size = { float(width), float(height) };
-		app->resized = true;
+		Application::instance->OnWindowResize(width, height);
+	});
+
+	glfwSetDropCallback(window, [](GLFWwindow* window, int path_count, const char* paths[]) {
+		Application::instance->OnDrop(path_count, paths);
 	});
 
 	if (window == nullptr) {
@@ -269,17 +270,6 @@ void Application::Run() {
 
 	uint64_t fpsCounter = 0;
 
-	int* cpu_side_buffer = nullptr;
-
-	int ffmpeg_frames_to_write = 0;
-	int ffmpeg_frame_counter = 0;
-
-	FILE* ffmpeg = nullptr;
-	recording = false;
-	glm::vec2 last_preview_size = {};
-
-	bool take_picture = false;
-
 	bool take_picture_imgui = false;
 	bool record_imgui = false;
 
@@ -325,13 +315,15 @@ void Application::Run() {
 	float recording_speed = 1.0f;
 
 	bool want_exit = false;
+	bool open_channel_settings = false;
+	int selected_channel = 0;
 
-	while (!glfwWindowShouldClose(window) && running) 
+	while (!glfwWindowShouldClose(window) && running)
 	{
 		auto this_frame_time = (float)glfwGetTime();
 		dt = this_frame_time - last_frame_time;
 
-		if (playing || recording)
+		if (playing)
 		{
 			time += dt;
 			frames++;
@@ -352,381 +344,410 @@ void Application::Run() {
 		// TODO: have a mode where we can only see the output of the selected pass and its input pass and so on
 		// that way we can see per pass progress and also for performance reasons too
 
-		if (take_picture || recording)
+		DrawAllPasses();
+
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		auto viewport_ds = ImGui::DockSpaceOverViewport();
+
+		if (ImGui::BeginMainMenuBar())
 		{
-			last_preview_size = preview_size;
-			preview_size = selected_resolution;
-			preview_resized = true;
-
-			int buffer_size = selected_resolution.x * selected_resolution.y;
-			cpu_side_buffer = new int[buffer_size];
-
-			auto t = std::time(nullptr);
-			auto tm = *std::localtime(&t);
-
-			if (take_picture)
+			if (ImGui::BeginMenu("File"))
 			{
-				DrawAllPasses();
-				glReadPixels(0, 0, selected_resolution.x, selected_resolution.y, GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
-				stbi_flip_vertically_on_write(1);
+				if (ImGui::MenuItem("Exit"))
+					want_exit = true;
 
-				std::stringstream name_ss;
-				name_ss << screenshot_output_directory.string() << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
-					selected_resolution.x << "x" << selected_resolution.y << "p" << ".png";
-				auto name = name_ss.str();
-
-				if (!stbi_write_png(name.c_str(), selected_resolution.x, selected_resolution.y, 4, cpu_side_buffer, 4 * selected_resolution.x))
-				{
-					printf("Failed to write output.png\n");
-				}
-
-				take_picture = false;
+				ImGui::EndMenu();
 			}
 
-			if (recording)
+			if (ImGui::BeginMenu("Preview"))
 			{
-				ffmpeg_frames_to_write = ((recording_time_minutes * 60) + recording_time_seconds) * (selected_frame_rate);
-
-				std::stringstream ss;
-				ss << "ffmpeg_bin\\ffmpeg.exe -benchmark -hide_banner -an -r " << selected_frame_rate << " -f rawvideo -pix_fmt rgba -s ";
-				ss << " " << selected_resolution.x << "x" << selected_resolution.y << " ";
-				ss << " -i - -c:v hevc_nvenc -y -pix_fmt yuv420p -vf vflip -preset losslesshp ";
-				ss << "\"" << video_output_directory << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
-					selected_resolution.x << "x" << selected_resolution.y << "p" << ".mp4\"";
-				std::string cmd = ss.str();
-
-				// open pipe to ffmpeg's stdin in binary write mode
-				ffmpeg = _popen(cmd.c_str(), "wb");
-
-				time = 0;
-
-				glfwSwapInterval(0);
-
-				for (int frame_index = 0; frame_index < ffmpeg_frames_to_write; ++frame_index) 
-				{
-					DrawAllPasses();
-					glReadPixels(0, 0, selected_resolution.x, selected_resolution.y, GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
-					_fwrite_nolock(cpu_side_buffer, sizeof(int) * buffer_size, 1, ffmpeg);
-					// TODO : add a customizable speed here 
-					time += (1.0f / float(selected_frame_rate)) * recording_speed;
-				}
-
-				_pclose(ffmpeg);
-				recording = false;
-				ffmpeg_frame_counter = 0;
-				ffmpeg_frames_to_write = 0;
-				frames = 0;
-				time = 0;
-
-				glfwSwapInterval(1);
-			}
-
-			preview_size = last_preview_size;
-			preview_resized = true;
-			delete[] cpu_side_buffer;
-			cpu_side_buffer = nullptr;
-		}
-
-		else
-		{
-			DrawAllPasses();
-
-			ImGui_ImplOpenGL3_NewFrame();
-			ImGui_ImplGlfw_NewFrame();
-			ImGui::NewFrame();
-
-			auto viewport_ds = ImGui::DockSpaceOverViewport();
-
-			if (ImGui::BeginMainMenuBar())
-			{
-				if (ImGui::BeginMenu("File"))
-				{
-					if (ImGui::MenuItem("Exit"))
-						want_exit = true;
-
-					ImGui::EndMenu();
-				}
-
-				if (ImGui::BeginMenu("Preview"))
-				{
-					if (ImGui::MenuItem(playing ? ("Pause " ICON_FA_PAUSE) : ("Play " ICON_FA_PLAY)))
-					{
-						playing = !playing;
-					}
-
-					if (ImGui::MenuItem("Reset"))
-					{
-						time = 0;
-					}
-
-					if (ImGui::MenuItem("Record") && selectedRenderPass)
-					{
-						record_imgui = true;
-					}
-
-					if (ImGui::MenuItem("Snap Shot") && selectedRenderPass)
-					{
-						take_picture_imgui = true;
-					}
-
-					ImGui::EndMenu();
-				}
-
-				ImGui::EndMainMenuBar();
-			}
-
-			if (want_exit)
-			{
-				ImGui::OpenPopup("Exit?");
-				ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
-				ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-				if (ImGui::BeginPopupModal("Exit?", &want_exit, ImGuiWindowFlags_AlwaysAutoResize))
-				{
-					ImGui::Text("Are you sure you want to exit?");
-					ImGui::Separator();
-
-					float button_size = 120;
-					auto avail = ImGui::GetContentRegionAvail().x;
-					auto x = (avail / 2) - ((ImGui::GetStyle().ItemSpacing.x + button_size + button_size) / 2);
-					ImGui::SetCursorPosX(x);
-					if (ImGui::Button("Yes", ImVec2(button_size, 0))) 
-					{
-						running = false;
-					}
-
-					ImGui::SameLine();
-					ImGui::SetItemDefaultFocus();
-					if (ImGui::Button("No", ImVec2(button_size, 0))) 
-					{
-						want_exit = false;
-						ImGui::CloseCurrentPopup();
-					}
-
-					ImGui::EndPopup();
-				}
-			}
-
-			if (record_imgui) 
-			{
-				ImGui::OpenPopup("RecordDetails");
-				ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
-				ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-				if (ImGui::BeginPopupModal("RecordDetails", &record_imgui, ImGuiWindowFlags_AlwaysAutoResize))
-				{
-					ImGui::TextColored({ 1,0,0,1 }, "Higher Resolution and Higher FPS will take longer");
-					ImGui::InputInt("Minutes", &recording_time_minutes);
-					ImGui::SameLine();
-					ImGui::InputInt("Seconds", &recording_time_seconds);
-					ImGui::Separator();
-					ImGui::Combo("VideoResolution", &resolution_index, resolution_strings.data(), resolution_strings.size());
-					ImGui::SameLine();
-					ImGui::Combo("VideoFPS", &frame_rate_index, frame_rate_strings.data(), frame_rate_strings.size());
-
-					if (resolution_index == resolution_strings.size() - 1)
-					{
-						ImGui::InputInt("Width", &selected_resolution.x);
-						ImGui::SameLine();
-						ImGui::InputInt("Height", &selected_resolution.y);
-					}
-					else
-					{
-						selected_resolution = resolutions[resolution_index];
-					}
-
-					if (frame_rate_index == frame_rate_strings.size() - 1)
-					{
-						ImGui::InputInt("FPS", &selected_frame_rate);
-					}
-					else
-					{
-						selected_frame_rate = frame_rates[frame_rate_index];
-					}
-
-					ImGui::InputFloat("Video Speed", &recording_speed);
-					ImGui::Separator();
-
-					float button_size = 120;
-					ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x / 2) - (button_size) / 2);
-					if (ImGui::Button("Record", ImVec2(button_size, 0))) 
-					{
-						recording = true;
-					}
-
-					ImGui::EndPopup();
-				}
-			}
-
-			if (take_picture_imgui) 
-			{	
-				ImGui::OpenPopup("SnapShotDetails");
-				ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
-				ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-				if (ImGui::BeginPopupModal("SnapShotDetails", &take_picture_imgui, ImGuiWindowFlags_AlwaysAutoResize))
-				{
-					ImGui::Combo("Resolution", &resolution_index, resolution_strings.data(), resolution_strings.size());
-					if (resolution_index == resolution_strings.size() - 1)
-					{
-						ImGui::InputInt("Width", &selected_resolution.x);
-						ImGui::SameLine();
-						ImGui::InputInt("Height", &selected_resolution.y);
-					}
-					else
-					{
-						selected_resolution = resolutions[resolution_index];
-					}
-
-					ImGui::Separator();
-
-					if (ImGui::Button("Take")) 
-					{
-						take_picture = true;
-					}
-					ImGui::EndPopup();
-				}
-			}
-
-			for (auto& ep : editors) 
-			{
-				if (selectedRenderPass == ep->renderPass)
-				{
-					ImGui::SetNextWindowDockID(viewport_ds);
-					ep->OnImGui();
-				}
-			}
-
-			ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)ImGui::GetMainViewport();
-			ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
-			float height = ImGui::GetFrameHeight();
-
-			if (ImGui::BeginViewportSideBar("##Status Bar", viewport, ImGuiDir_Down, height, window_flags)) 
-			{
-				if (ImGui::BeginMenuBar()) 
-				{
-					ImGui::Text(ICON_FA_CLOCK " %.2f        " ICON_FA_FILM " %u        FPS %u", time, frames, fps);
-					ImGui::EndMenuBar();
-				}
-				ImGui::End();
-			}
-
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 0, 0 });
-
-			if (ImGui::Begin("Preview")) 
-			{
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-
-				auto avail = ImGui::GetContentRegionAvail();
-				ImGui::SetCursorPosX((avail.x / 2.0f) - ((ImGui::GetFontSize() * 6) / 2));
-
-				// TODO: make this changeable
-				float seek_speed = 5.0f;
-
-				if (ImGui::Button(ICON_FA_REPEAT)) 
-				{
-					time = 0;
-					frames = 0;
-					fps = 0;
-					fpsCounter = 0;
-					secondsCounter = 0;
-				}
-
-				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_BACKWARD_FAST)) 
-				{
-					time -= dt * seek_speed;
-				}
-
-				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_BACKWARD_STEP)) 
-				{
-					time -= dt;
-				}
-
-				ImGui::SameLine();
-				if (ImGui::Button(playing ? (ICON_FA_PAUSE) : (ICON_FA_PLAY))) 
+				if (ImGui::MenuItem(playing ? ("Pause " ICON_FA_PAUSE) : ("Play " ICON_FA_PLAY)))
 				{
 					playing = !playing;
 				}
 
-				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_FORWARD_STEP)) 
+				if (ImGui::MenuItem("Reset"))
 				{
-					time += dt;
+					time = 0;
+				}
+
+				if (ImGui::MenuItem("Record") && selectedRenderPass)
+				{
+					record_imgui = true;
+				}
+
+				if (ImGui::MenuItem("Snap Shot") && selectedRenderPass)
+				{
+					take_picture_imgui = true;
+				}
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndMainMenuBar();
+		}
+
+		if (want_exit)
+		{
+			ImGui::OpenPopup("Exit?");
+			ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+			ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::BeginPopupModal("Exit?", &want_exit, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::Text("Are you sure you want to exit?");
+				ImGui::Separator();
+
+				float button_size = 120;
+				auto avail = ImGui::GetContentRegionAvail().x;
+				auto x = (avail / 2) - ((ImGui::GetStyle().ItemSpacing.x + button_size + button_size) / 2);
+				ImGui::SetCursorPosX(x);
+				if (ImGui::Button("Yes", ImVec2(button_size, 0)))
+				{
+					running = false;
 				}
 
 				ImGui::SameLine();
-				if (ImGui::Button(ICON_FA_FORWARD_FAST)) 
+				ImGui::SetItemDefaultFocus();
+				if (ImGui::Button("No", ImVec2(button_size, 0)))
 				{
-					time += dt * seek_speed;
+					want_exit = false;
+					ImGui::CloseCurrentPopup();
 				}
 
-				ImGui::PopStyleColor();
+				ImGui::EndPopup();
+			}
+		}
 
-				avail = ImGui::GetContentRegionAvail();
+		if (record_imgui)
+		{
+			ImGui::OpenPopup("RecordDetails");
+			ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+			ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::BeginPopupModal("RecordDetails", &record_imgui, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::TextColored({ 1,0,0,1 }, "Higher Resolution and Higher FPS will take longer");
+				ImGui::InputInt("Minutes", &recording_time_minutes);
+				ImGui::SameLine();
+				ImGui::InputInt("Seconds", &recording_time_seconds);
+				ImGui::Separator();
+				ImGui::Combo("VideoResolution", &resolution_index, resolution_strings.data(), (int)resolution_strings.size());
+				ImGui::SameLine();
+				ImGui::Combo("VideoFPS", &frame_rate_index, frame_rate_strings.data(), (int)frame_rate_strings.size());
 
-				if (preview_size.x != avail.x || preview_size.y != avail.y)
+				if (resolution_index == (int)resolution_strings.size() - 1)
 				{
-					preview_resized = true;
+					ImGui::InputInt("Width", &selected_resolution.x);
+					ImGui::SameLine();
+					ImGui::InputInt("Height", &selected_resolution.y);
+				}
+				else
+				{
+					selected_resolution = resolutions[resolution_index];
 				}
 
-				preview_size = { avail.x, avail.y };
-
-				if (!preview_resized)
+				if (frame_rate_index == (int)frame_rate_strings.size() - 1)
 				{
-					ImGui::Image(reinterpret_cast<void*>((unsigned long long)preview_fb->attachments[0].id),
-						{ preview_size.x, preview_size.y }, { 0, 1 }, { 1, 0 });
+					ImGui::InputInt("FPS", &selected_frame_rate);
 				}
+				else
+				{
+					selected_frame_rate = frame_rates[frame_rate_index];
+				}
+
+				ImGui::InputFloat("Video Speed", &recording_speed);
+				ImGui::Separator();
+
+				float button_size = 120;
+				ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x / 2) - (button_size) / 2);
+				if (ImGui::Button("Record", ImVec2(button_size, 0)))
+				{
+					OnRecord(selected_resolution.x, selected_resolution.y, 
+						recording_time_minutes * 60 + recording_time_seconds, selected_frame_rate, recording_speed);
+				}
+
+				ImGui::EndPopup();
+			}
+		}
+
+		if (take_picture_imgui)
+		{
+			ImGui::OpenPopup("SnapShotDetails");
+			ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+			ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::BeginPopupModal("SnapShotDetails", &take_picture_imgui, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::Combo("Resolution", &resolution_index, resolution_strings.data(), (int)resolution_strings.size());
+				if (resolution_index == resolution_strings.size() - 1)
+				{
+					ImGui::InputInt("Width", &selected_resolution.x);
+					ImGui::SameLine();
+					ImGui::InputInt("Height", &selected_resolution.y);
+				}
+				else
+				{
+					selected_resolution = resolutions[resolution_index];
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::Button("Take"))
+				{
+					OnTakeScreenShot(selected_resolution.x, selected_resolution.y);
+				}
+				ImGui::EndPopup();
+			}
+		}
+
+		for (auto& ep : editors)
+		{
+			if (selectedRenderPass == ep->renderPass)
+			{
+				ImGui::SetNextWindowDockID(viewport_ds);
+				ep->OnImGui();
+			}
+		}
+
+		ImGuiViewportP* viewport = (ImGuiViewportP*)(void*)ImGui::GetMainViewport();
+		ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_MenuBar;
+		float height = ImGui::GetFrameHeight();
+
+		if (ImGui::BeginViewportSideBar("##Status Bar", viewport, ImGuiDir_Down, height, window_flags))
+		{
+			if (ImGui::BeginMenuBar())
+			{
+				ImGui::Text(ICON_FA_CLOCK " %.2f        " ICON_FA_FILM " %u        FPS %u", time, frames, fps);
+				ImGui::EndMenuBar();
 			}
 			ImGui::End();
+		}
 
-			ImGui::PopStyleVar();
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 0, 0 });
 
-			if (ImGui::Begin("Pipeline")) 
+		if (ImGui::Begin("Preview"))
+		{
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+			auto avail = ImGui::GetContentRegionAvail();
+			ImGui::SetCursorPosX((avail.x / 2.0f) - ((ImGui::GetFontSize() * 6) / 2));
+
+			// TODO: make this changeable
+			float seek_speed = 5.0f;
+
+			if (ImGui::Button(ICON_FA_REPEAT))
 			{
-				for (size_t i = 0; i < passes.size(); i++)
+				time = 0;
+				frames = 0;
+				fps = 0;
+				fpsCounter = 0;
+				secondsCounter = 0;
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button(ICON_FA_BACKWARD_FAST))
+			{
+				time -= dt * seek_speed;
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button(ICON_FA_BACKWARD_STEP))
+			{
+				time -= dt;
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button(playing ? (ICON_FA_PAUSE) : (ICON_FA_PLAY)))
+			{
+				playing = !playing;
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button(ICON_FA_FORWARD_STEP))
+			{
+				time += dt;
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button(ICON_FA_FORWARD_FAST))
+			{
+				time += dt * seek_speed;
+			}
+
+			ImGui::PopStyleColor();
+
+			avail = ImGui::GetContentRegionAvail();
+			if (avail.x != preview_fb->width || avail.y != preview_fb->height)
+			{
+				OnPreviewResized(int(avail.x), int(avail.y));
+			}
+			ImGui::Image(reinterpret_cast<void*>((unsigned long long)preview_fb->attachments[0].id), avail, { 0, 1 }, { 1, 0 });
+			
+		}
+		ImGui::End();
+
+		ImGui::PopStyleVar();
+
+		if (ImGui::Begin("Pipeline"))
+		{
+			for (size_t i = 0; i < passes.size(); i++)
+			{
+				const auto pass = passes[i];
+				bool selected = selectedRenderPass == pass;
+				if (ImGui::Selectable((pass->GetName() + (selected ? ("    " ICON_FA_PLAY) : (""))).c_str(), selected))
 				{
-					const auto pass = passes[i];
-					bool selected = selectedRenderPass == pass;
-					if (ImGui::Selectable((pass->GetName() + (selected ? ("    " ICON_FA_PLAY) : (""))).c_str())) 
+					selectedRenderPass = pass;
+				}
+			}
+
+			if (ImGui::BeginPopupContextWindow("PipelineContextMenu",
+				ImGuiPopupFlags_MouseButtonRight |
+				ImGuiPopupFlags_NoOpenOverExistingPopup |
+				ImGuiPopupFlags_NoOpenOverItems))
+			{
+				if (ImGui::MenuItem("Create ShaderToy Pass"))
+				{
+					CreateShaderToyRenderPass();
+					selectedRenderPass = passes.back();
+				}
+				ImGui::EndPopup();
+			}
+		}
+		ImGui::End();
+
+		// TODO: clear the drop items vector
+		if (!drop_items.empty()) 
+		{
+			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceExtern))
+			{
+				ImGui::SetDragDropPayload("dropped_files", 0, 0);
+				ImGui::EndDragDropSource();
+			}
+		}
+
+		if (ImGui::Begin("Pass Properties")) 
+		{
+			if (selectedRenderPass) 
+			{
+				ImGui::Columns(2);
+
+				auto size = ImVec2{ 120, 120 };
+
+				for (int i = 0; i < 16; i++)
+				{
+					if (i > 0 && i % 2 == 0) {
+						ImGui::NextColumn();
+					}
+
+					ImGui::Text("Channel %d", i);
+
+					auto channel = selectedRenderPass->GetChannel(i);
+					auto is_image_clicked = false;
+
+					char buff[128];
+					sprintf_s(buff, "%sChannel%d%d", selectedRenderPass->GetName().c_str(), i, int(selectedRenderPass));
+					if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
 					{
-						selectedRenderPass = pass;
+						is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)(channel->texture->id)), size, { 0, 1 }, { 1, 0 });
+					}
+					else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
+					{
+						is_image_clicked = ImGui::ImageButton(buff, 
+							reinterpret_cast<void*>((unsigned long long)(
+								channel->pass->GetOutput()->attachments[0].id)), size, { 0, 1 }, { 1, 0 });
+					}
+					else
+					{
+						is_image_clicked = ImGui::ImageButton(buff, 0, size);
+					}
+
+					if (is_image_clicked)
+					{
+						open_channel_settings = true;
+						selected_channel = i;
+					}
+
+					if (ImGui::BeginDragDropTarget())
+					{
+						auto payload = ImGui::AcceptDragDropPayload("dropped_files");
+						ImGui::EndDragDropTarget();
+						for (const auto& item : drop_items)
+						{
+							if (item.ends_with(".png") || item.ends_with(".jpg") || item.ends_with(".jpeg"))
+							{
+								auto c = new Channel;
+								c->texture = new Texture;
+								if (!c->texture->Init(item))
+								{
+									delete c->texture;
+									delete c;
+									continue;
+								}
+								c->type = ChannelType::EXTERNAL_IMAGE;
+								selectedRenderPass->SetChannel(i, c);
+								break;
+							}
+						}
+						drop_items.clear();
 					}
 				}
+				ImGui::Columns(1);
+			}
+		}
+		ImGui::End();
 
-				if (ImGui::BeginPopupContextWindow("PipelineContextMenu",
-					ImGuiPopupFlags_MouseButtonRight |
-					ImGuiPopupFlags_NoOpenOverExistingPopup |
-					ImGuiPopupFlags_NoOpenOverItems))
-				{
-					if (ImGui::MenuItem("Create ShaderToy Pass", "CTRL+S+T"))
+		if (open_channel_settings) {
+			ImGui::OpenPopup("ChannelSettings");
+			ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
+			ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::BeginPopupModal("ChannelSettings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::Text("%s Channel %d Settings", selectedRenderPass->GetName().c_str(), selected_channel);
+				
+				auto c = selectedRenderPass->GetChannel(selected_channel);
+
+				ImGui::Combo("Channel Type", (int*)(&c->type), "ImageFile\0RenderPass\0");
+				
+				
+				if (c->type == ChannelType::RENDERPASS) {
+					static int current_item = 0;
+
+					if (ImGui::BeginCombo("Render Pass", c->pass ? c->pass->GetName().c_str() : "Select Render Pass"))
 					{
-						CreateShaderToyRenderPass();
-						selectedRenderPass = passes.back();
-						preview_resized = true; // this is a hack to resize the framebuffer of a new added pass
+						for (size_t i = 0; i < passes.size(); i++)
+						{
+							bool selected = c->pass == passes[i];
+							if (ImGui::Selectable(passes[i]->GetName().c_str(), selected))
+							{
+								c->pass = passes[i];
+							}
+						}
+						ImGui::EndCombo();
 					}
-					ImGui::EndPopup();
 				}
-			}
-			ImGui::End();
+				else
+				{
+					c->pass = nullptr;
+				}
 
-			// Rendering
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			ImGui::Render();
-			glClear(GL_COLOR_BUFFER_BIT);
-			if (resized) 
-			{
-				glViewport(0, 0, (int)window_size.x, (int)window_size.y);
-				resized = false;
+				ImGui::EndPopup();
 			}
-			ImGuiIO& io = ImGui::GetIO();
-			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-			if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) 
-			{
-				GLFWwindow* backup_current_context = glfwGetCurrentContext();
-				ImGui::UpdatePlatformWindows();
-				ImGui::RenderPlatformWindowsDefault();
-				glfwMakeContextCurrent(backup_current_context);
-			}
-		} // if (recording)
+		}
+
+		// Rendering
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		ImGui::Render();
+		glClear(GL_COLOR_BUFFER_BIT);
+		ImGuiIO& io = ImGui::GetIO();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+		{
+			GLFWwindow* backup_current_context = glfwGetCurrentContext();
+			ImGui::UpdatePlatformWindows();
+			ImGui::RenderPlatformWindowsDefault();
+			glfwMakeContextCurrent(backup_current_context);
+		}
 
 		glfwSwapBuffers(window);
 	}
@@ -804,12 +825,16 @@ void Application::CreateEditorPanel(RenderPass* renderPass)
 
 }
 
-class ShaderToyRenderPass : public RenderPass {
+class FullScreenRenderPass : public RenderPass {
 
 public:
 	virtual void Init() override
 	{
-		name = "ShaderToyRenderPass";
+		RenderPass::Init();
+
+		std::stringstream ss;
+		ss << "FullScreenRenderPass_" << Application::Get()->GetPassCount() + 1;
+		name = ss.str();
 
 		auto fb = new Framebuffer;
 
@@ -819,9 +844,10 @@ public:
 				.type = FramebufferAttachmentType::Color
 			});
 
-		auto window_size = Application::instance->window_size;
+		auto width = Application::instance->preview_fb->width;
+		auto height = Application::instance->preview_fb->height;
 
-		fb->Init(int(window_size.x), int(window_size.y), attachments);
+		fb->Init(width, height, attachments);
 		output = fb;
 
 		shader = new Shader;
@@ -849,17 +875,6 @@ public:
 			output->Bind();
 			shader->Bind();
 
-			if (input)
-			{
-				auto input_fb = input->GetOutput();
-				if (input_fb)
-				{
-					auto color_attachment0 = input_fb->attachments[0].id;
-					glBindTextureUnit(0, color_attachment0);
-					shader->UniformInt("iLastPass", 0);
-				}
-			}
-
 			shader->UniformVec3("iResolution", glm::vec3{float(output->width), float(output->height) , 0});
 			shader->UniformFloat("iTime", Application::instance->time);
 			Application::instance->DrawFullScreenQuad();
@@ -869,16 +884,8 @@ public:
 
 void Application::CreateShaderToyRenderPass()
 {
-	RenderPass* lastPass = nullptr;
-
-	if (passes.size() > 0)
-	{
-		lastPass = passes.back();
-	}
-
-	auto rp = new ShaderToyRenderPass;
+	auto rp = new FullScreenRenderPass;
 	rp->Init();
-	rp->SetInput(lastPass);
 	passes.push_back(rp);
 
 	// TODO: move this someplace sane
@@ -923,22 +930,10 @@ void Application::DrawFullScreenQuad()
 
 void Application::DrawAllPasses()
 {
-	if (preview_resized) 
-	{
-
-		for (size_t i = 0; i < passes.size(); i++)
-		{
-			const auto& pass = passes[i];
-			pass->Resize(int(preview_size.x), int(preview_size.y));
-		}
-
-		preview_fb->Resize(int(preview_size.x), int(preview_size.y));
-		preview_resized = false;
-	}
-
 	for (size_t i = 0; i < passes.size(); i++)
 	{
 		const auto& pass = passes[i];
+		pass->BindChannels();
 		pass->Draw();
 	}
 
@@ -952,8 +947,103 @@ void Application::DrawAllPasses()
 		preview_fb->Bind();
 		glBindTextureUnit(0, selectedRenderPass->GetOutput()->attachments[0].id);
 		preview_shader->Bind();
-		preview_shader->UniformInt("inputColorAttachment", 0);
 		DrawFullScreenQuad();
 	}
 }
 
+void Application::OnDrop(int count, const char* items[])
+{
+	for (int i = 0; i < count; i++)
+	{
+		drop_items.push_back(std::string(items[i]));
+	}
+}
+
+void Application::OnWindowResize(int width, int height)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, width, height);
+}
+
+void Application::OnPreviewResized(int width, int height)
+{
+	for (size_t i = 0; i < passes.size(); i++)
+	{
+		passes[i]->Resize(width, height);
+	}
+
+	preview_fb->Resize(width, height);
+}
+
+void Application::OnRecord(int width, int height, int recording_time, int frame_rate, float speed)
+{
+	auto last_preview_size = glm::ivec2{ preview_fb->width, preview_fb->height };
+
+	auto buffer_size = width * height;
+	auto cpu_side_buffer = new int[buffer_size];
+
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+
+	auto ffmpeg_frames_to_write = recording_time * frame_rate;
+
+	std::stringstream ss;
+	ss << "ffmpeg_bin\\ffmpeg.exe -benchmark -hide_banner -an -r " << frame_rate << " -f rawvideo -pix_fmt rgba -s ";
+	ss << " " << width << "x" << height << " ";
+	ss << " -i - -c:v hevc_nvenc -y -pix_fmt yuv420p -vf vflip -preset losslesshp ";
+	ss << "\"" << video_output_directory << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
+		width << "x" << height << "p" << ".mp4\"";
+	auto cmd = ss.str();
+
+	auto ffmpeg = _popen(cmd.c_str(), "wb");
+	time = 0;
+	glfwSwapInterval(0);
+
+	OnPreviewResized(width, height);
+
+	while (ffmpeg_frames_to_write > 0) 
+	{
+		DrawAllPasses();
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
+		_fwrite_nolock(cpu_side_buffer, sizeof(int) * buffer_size, 1, ffmpeg);
+		time += (1.0f / float(frame_rate)) * speed;
+		ffmpeg_frames_to_write--;
+	}
+
+
+	_pclose(ffmpeg);
+	frames = 0;
+	time = 0;
+	delete[] cpu_side_buffer;
+
+	OnPreviewResized(last_preview_size.x, last_preview_size.y);
+	glfwSwapInterval(1);
+}
+
+void Application::OnTakeScreenShot(int width, int height)
+{
+	auto last_preview_size = glm::ivec2{ preview_fb->width, preview_fb->height };
+
+	auto buffer_size = width * height;
+	auto cpu_side_buffer = new int[buffer_size];
+
+	auto t = std::time(nullptr);
+	auto tm = *std::localtime(&t);
+	OnPreviewResized(width, height);
+
+	DrawAllPasses();
+	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, cpu_side_buffer);
+	
+	std::stringstream ss;
+	ss << "ffmpeg_bin\\ffmpeg.exe -benchmark -hide_banner -r 1 -f rawvideo -pix_fmt rgba -s " << width << "x" << height 
+		<< " -i -  -vf \"fps = 1, scale = "<< width << ":-1 : flags = lanczos, vflip\" -f image2pipe -vcodec png "
+		<< "\"" << screenshot_output_directory.string() << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
+		width << "x" << height << "p" << ".png\"";
+	auto cmd = ss.str();
+	auto ffmpeg = _popen(cmd.c_str(), "wb");
+	_fwrite_nolock(cpu_side_buffer, sizeof(int) * buffer_size, 1, ffmpeg);
+	_pclose(ffmpeg);
+
+	delete[] cpu_side_buffer;
+	OnPreviewResized(last_preview_size.x, last_preview_size.y);
+}

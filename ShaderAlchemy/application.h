@@ -10,12 +10,14 @@
 
 #include "RenderPass.h"
 
-enum class EditorPanelType {
+enum class EditorPanelType 
+{
 	VertexShader,
 	FragmentShader
 };
 
-struct EditorPanel {
+struct EditorPanel 
+{
 	TextEditor* editor = nullptr;
 	std::string name;
 // TODO: realy should this be here
@@ -30,17 +32,13 @@ struct Application
 
 	static Application* instance;
 
+	static Application* Get() { return instance; }
+
 	GLFWwindow* window;
 	glm::vec2 window_size;
-	glm::vec2 preview_size;
 
 	bool running{};
-	bool resized{};
-	bool preview_resized{};
-
 	bool playing{};
-
-	bool recording = true;
 
 	float time{};
 	float dt{};
@@ -52,6 +50,7 @@ struct Application
 
 	std::vector<EditorPanel*> editors;
 	std::vector<RenderPass*> passes;
+	std::vector<std::string> drop_items;
 
 	RenderPass* selectedRenderPass{};
 
@@ -73,5 +72,14 @@ struct Application
 	void DrawFullScreenQuad();
 
 	void DrawAllPasses();
+
+	void OnDrop(int count, const char* items[]);
+	void OnWindowResize(int widht, int height);
+	void OnPreviewResized(int width, int height);
+
+	void OnRecord(int width, int height, int recording_time, int frame_rate, float speed);
+	void OnTakeScreenShot(int width, int height);
+
+	size_t GetPassCount() { return passes.size(); }
 };
 

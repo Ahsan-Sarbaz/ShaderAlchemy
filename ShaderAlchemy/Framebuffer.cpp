@@ -72,6 +72,11 @@ void Framebuffer::Bind()
 	glViewport(0, 0, width, height);
 }
 
+void Framebuffer::BindAttachment(int index, int unit)
+{
+	glBindTextureUnit(unit, attachments[index].id);
+}
+
 void Framebuffer::ClearColorAttachments(const glm::vec4& color)
 {
 	float clearColor[4] = { color.r, color.g, color.b, color.a };
