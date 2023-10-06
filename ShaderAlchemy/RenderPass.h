@@ -29,6 +29,7 @@ class RenderPass
 public:
 	virtual void Init();
 	virtual void Draw() = 0;
+	virtual void OnImGui() = 0;
 	
 	void SetShader(Shader* shader) { this->shader = shader; }
 

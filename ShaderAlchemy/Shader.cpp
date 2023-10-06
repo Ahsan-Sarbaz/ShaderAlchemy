@@ -171,12 +171,12 @@ void Shader::GetShaderUniformsInfo()
 	}
 }
 
-void Shader::Bind()
+void Shader::Bind() const
 {
 	glUseProgram(id);
 }
 
-int Shader::GetUniformLocation(const char* name)
+int Shader::GetUniformLocation(const char* name) const
 {
 	for (const auto& uniform : uniforms) {
 		if (uniform.name == std::string(name))
@@ -188,7 +188,7 @@ int Shader::GetUniformLocation(const char* name)
 	return -1;
 }
 
-void Shader::UniformInt(const char* name, int value)
+void Shader::UniformInt(const char* name, int value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)
@@ -197,7 +197,7 @@ void Shader::UniformInt(const char* name, int value)
 	}
 }
 
-void Shader::UniformFloat(const char* name, float value)
+void Shader::UniformFloat(const char* name, float value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)
@@ -206,7 +206,7 @@ void Shader::UniformFloat(const char* name, float value)
 	}
 }
 
-void Shader::UniformVec2(const char* name, const glm::vec2& value)
+void Shader::UniformVec2(const char* name, const glm::vec2& value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)
@@ -215,7 +215,7 @@ void Shader::UniformVec2(const char* name, const glm::vec2& value)
 	}
 }
 
-void Shader::UniformVec3(const char* name, const glm::vec3& value)
+void Shader::UniformVec3(const char* name, const glm::vec3& value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)
@@ -224,7 +224,7 @@ void Shader::UniformVec3(const char* name, const glm::vec3& value)
 	}
 }
 
-void Shader::UniformVec4(const char* name, const glm::vec4& value)
+void Shader::UniformVec4(const char* name, const glm::vec4& value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)
@@ -233,7 +233,7 @@ void Shader::UniformVec4(const char* name, const glm::vec4& value)
 	}
 }
 
-void Shader::UniformMat2(const char* name, const glm::mat2& value)
+void Shader::UniformMat2(const char* name, const glm::mat2& value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)
@@ -242,7 +242,7 @@ void Shader::UniformMat2(const char* name, const glm::mat2& value)
 	}
 }
 
-void Shader::UniformMat3(const char* name, const glm::mat3& value)
+void Shader::UniformMat3(const char* name, const glm::mat3& value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)
@@ -251,7 +251,7 @@ void Shader::UniformMat3(const char* name, const glm::mat3& value)
 	}
 }
 
-void Shader::UniformMat4(const char* name, const glm::mat4& value)
+void Shader::UniformMat4(const char* name, const glm::mat4& value) const
 {
 	auto location = GetUniformLocation(name);
 	if (location >= 0)

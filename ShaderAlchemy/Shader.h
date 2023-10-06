@@ -35,24 +35,24 @@ public:
 
 	void GetShaderUniformsInfo();
 
-	bool IsValid() { return isValid; }
+	bool IsValid() const { return isValid; }
 
-	void Bind();
+	void Bind() const;
 
-	int GetUniformLocation(const char* name);
+	int GetUniformLocation(const char* name) const;
 
-	void UniformInt(const char* name, int value);
-	void UniformFloat(const char* name, float value);
-	void UniformVec2(const char* name, const glm::vec2& value);
-	void UniformVec3(const char* name, const glm::vec3& value);
-	void UniformVec4(const char* name, const glm::vec4& value);
-	void UniformMat2(const char* name, const glm::mat2& value);
-	void UniformMat3(const char* name, const glm::mat3& value);
-	void UniformMat4(const char* name, const glm::mat4& value);
+	void UniformInt(const char* name, int value) const;
+	void UniformFloat(const char* name, float value)  const;
+	void UniformVec2(const char* name, const glm::vec2& value) const;
+	void UniformVec3(const char* name, const glm::vec3& value) const;
+	void UniformVec4(const char* name, const glm::vec4& value) const;
+	void UniformMat2(const char* name, const glm::mat2& value) const;
+	void UniformMat3(const char* name, const glm::mat3& value) const;
+	void UniformMat4(const char* name, const glm::mat4& value) const;
 
-	const std::string& GetName() { return name; }
-	const std::string& GetVertexSource() { return vertexSource; }
-	const std::string& GetFragmentSource() { return fragmentSource; }
+	const std::string& GetName()  const { return name; }
+	const std::string& GetVertexSource() const { return vertexSource; }
+	const std::string& GetFragmentSource() const { return fragmentSource; }
 
 private:
 	bool isValid {false };

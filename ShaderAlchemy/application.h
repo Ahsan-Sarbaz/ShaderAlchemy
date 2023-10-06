@@ -9,6 +9,7 @@
 #include <filesystem>
 
 #include "RenderPass.h"
+#include "VertexInput.h"
 
 enum class EditorPanelType 
 {
@@ -26,6 +27,8 @@ struct EditorPanel
 	int undoIndexOnDisk{0};
 	void OnImGui();
 };
+
+
 
 struct Application
 {
@@ -46,7 +49,8 @@ struct Application
 	uint64_t frames{};
 	uint64_t fps{};
 
-	unsigned int quadVao{};
+	VertexInput quadVertexInput;
+	VertexInput meshVertexInput;
 
 	std::vector<EditorPanel*> editors;
 	std::vector<RenderPass*> passes;
@@ -66,7 +70,8 @@ struct Application
 
 	void CreateEditorPanel(const std::filesystem::path& path);
 	void CreateEditorPanel(RenderPass* renderPass);
-	void CreateShaderToyRenderPass();
+	void CreateFullScreenRenderPass();
+	void CreateModelInputRenderPass();
 
 	void InitQuadVoa();
 	void DrawFullScreenQuad();
@@ -83,3 +88,4 @@ struct Application
 	size_t GetPassCount() { return passes.size(); }
 };
 
+bool read_entire_file(const std::filesystem::path& path, std::string& string);

@@ -11,9 +11,18 @@
 #include <algorithm>
 #include <array>
 
+#include "FullScreenRenderPass.h"
+#include "ModelInputRenderPass.h"
+
+extern "C" {
+	__declspec(dllexport) int NvOptimusEnablement = 1;
+	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+
 Application* Application::instance = nullptr;
 
-bool read_entire_file(const std::filesystem::path& path, std::string& string) {
+bool read_entire_file(const std::filesystem::path& path, std::string& string) 
+{
 	std::ifstream file (path);
 
 	if (!file.is_open()) return false;
@@ -252,6 +261,13 @@ void Application::Init() {
 
 	if (!std::filesystem::exists(video_output_directory))
 		std::filesystem::create_directories(video_output_directory);
+
+	meshVertexInput.Init();
+	meshVertexInput.AddVec3(); // position
+	meshVertexInput.AddVec3(); // normal
+	meshVertexInput.AddVec3(); // tangent
+	meshVertexInput.AddVec3(); // bi-tangent
+	meshVertexInput.AddVec2(); // uv
 
 	Run();
 	Shutdown();
@@ -606,17 +622,23 @@ void Application::Run() {
 				ImGuiPopupFlags_NoOpenOverExistingPopup |
 				ImGuiPopupFlags_NoOpenOverItems))
 			{
-				if (ImGui::MenuItem("Create ShaderToy Pass"))
+				if (ImGui::MenuItem("Create FullScreen Pass"))
 				{
-					CreateShaderToyRenderPass();
+					CreateFullScreenRenderPass();
 					selectedRenderPass = passes.back();
 				}
+
+				if (ImGui::MenuItem("Create Model Input Pass"))
+				{
+					CreateModelInputRenderPass();
+					selectedRenderPass = passes.back();
+				}
+
 				ImGui::EndPopup();
 			}
 		}
 		ImGui::End();
 
-		// TODO: clear the drop items vector
 		if (!drop_items.empty()) 
 		{
 			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceExtern))
@@ -628,112 +650,11 @@ void Application::Run() {
 
 		if (ImGui::Begin("Pass Properties")) 
 		{
-			if (selectedRenderPass) 
-			{
-				ImGui::Columns(2);
-
-				auto size = ImVec2{ 120, 120 };
-
-				for (int i = 0; i < 16; i++)
-				{
-					if (i > 0 && i % 2 == 0) {
-						ImGui::NextColumn();
-					}
-
-					ImGui::Text("Channel %d", i);
-
-					auto channel = selectedRenderPass->GetChannel(i);
-					auto is_image_clicked = false;
-
-					char buff[128];
-					sprintf_s(buff, "%sChannel%d%d", selectedRenderPass->GetName().c_str(), i, int(selectedRenderPass));
-					if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
-					{
-						is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)(channel->texture->id)), size, { 0, 1 }, { 1, 0 });
-					}
-					else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
-					{
-						is_image_clicked = ImGui::ImageButton(buff, 
-							reinterpret_cast<void*>((unsigned long long)(
-								channel->pass->GetOutput()->attachments[0].id)), size, { 0, 1 }, { 1, 0 });
-					}
-					else
-					{
-						is_image_clicked = ImGui::ImageButton(buff, 0, size);
-					}
-
-					if (is_image_clicked)
-					{
-						open_channel_settings = true;
-						selected_channel = i;
-					}
-
-					if (ImGui::BeginDragDropTarget())
-					{
-						auto payload = ImGui::AcceptDragDropPayload("dropped_files");
-						ImGui::EndDragDropTarget();
-						for (const auto& item : drop_items)
-						{
-							if (item.ends_with(".png") || item.ends_with(".jpg") || item.ends_with(".jpeg"))
-							{
-								auto c = new Channel;
-								c->texture = new Texture;
-								if (!c->texture->Init(item))
-								{
-									delete c->texture;
-									delete c;
-									continue;
-								}
-								c->type = ChannelType::EXTERNAL_IMAGE;
-								selectedRenderPass->SetChannel(i, c);
-								break;
-							}
-						}
-						drop_items.clear();
-					}
-				}
-				ImGui::Columns(1);
-			}
+			if(selectedRenderPass)
+				selectedRenderPass->OnImGui();
 		}
+
 		ImGui::End();
-
-		if (open_channel_settings) {
-			ImGui::OpenPopup("ChannelSettings");
-			ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
-			ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::BeginPopupModal("ChannelSettings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
-			{
-				ImGui::Text("%s Channel %d Settings", selectedRenderPass->GetName().c_str(), selected_channel);
-				
-				auto c = selectedRenderPass->GetChannel(selected_channel);
-
-				ImGui::Combo("Channel Type", (int*)(&c->type), "ImageFile\0RenderPass\0");
-				
-				
-				if (c->type == ChannelType::RENDERPASS) {
-					static int current_item = 0;
-
-					if (ImGui::BeginCombo("Render Pass", c->pass ? c->pass->GetName().c_str() : "Select Render Pass"))
-					{
-						for (size_t i = 0; i < passes.size(); i++)
-						{
-							bool selected = c->pass == passes[i];
-							if (ImGui::Selectable(passes[i]->GetName().c_str(), selected))
-							{
-								c->pass = passes[i];
-							}
-						}
-						ImGui::EndCombo();
-					}
-				}
-				else
-				{
-					c->pass = nullptr;
-				}
-
-				ImGui::EndPopup();
-			}
-		}
 
 		// Rendering
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -825,66 +746,19 @@ void Application::CreateEditorPanel(RenderPass* renderPass)
 
 }
 
-class FullScreenRenderPass : public RenderPass {
-
-public:
-	virtual void Init() override
-	{
-		RenderPass::Init();
-
-		std::stringstream ss;
-		ss << "FullScreenRenderPass_" << Application::Get()->GetPassCount() + 1;
-		name = ss.str();
-
-		auto fb = new Framebuffer;
-
-		std::vector<FramebufferAttachment> attachments;
-		attachments.push_back(FramebufferAttachment{
-				.format = GL_RGBA8,
-				.type = FramebufferAttachmentType::Color
-			});
-
-		auto width = Application::instance->preview_fb->width;
-		auto height = Application::instance->preview_fb->height;
-
-		fb->Init(width, height, attachments);
-		output = fb;
-
-		shader = new Shader;
-		shader->Init("ShaderToyBase");
-		std::string source;
-		if (read_entire_file("Shaders\\ShaderToyBaseVertex.glsl", source))
-		{
-			shader->AttachVertexShader(source);
-		}
-
-		if (read_entire_file("Shaders\\ShaderToyBaseFragment.glsl", source))
-		{
-			shader->AttachFragmentShader(source);
-		}
-
-		shader->CompileShader();
-		shader->GetShaderUniformsInfo();
-	}
-
-	virtual void Draw() override
-	{
-		if (shader->IsValid()) 
-		{
-			output->ClearColorAttachments({0, 0, 0, 1.0f});
-			output->Bind();
-			shader->Bind();
-
-			shader->UniformVec3("iResolution", glm::vec3{float(output->width), float(output->height) , 0});
-			shader->UniformFloat("iTime", Application::instance->time);
-			Application::instance->DrawFullScreenQuad();
-		}
-	}
-};
-
-void Application::CreateShaderToyRenderPass()
+void Application::CreateFullScreenRenderPass()
 {
 	auto rp = new FullScreenRenderPass;
+	rp->Init();
+	passes.push_back(rp);
+
+	// TODO: move this someplace sane
+	CreateEditorPanel(rp);
+}
+
+void Application::CreateModelInputRenderPass()
+{
+	auto rp = new ModelInputRenderPass;
 	rp->Init();
 	passes.push_back(rp);
 
@@ -905,26 +779,20 @@ void Application::InitQuadVoa()
 		 1,  1,  0, 1, 1, 1	// 3
 	};
 
-	glCreateVertexArrays(1, &quadVao);
+	quadVertexInput.Init();
+	quadVertexInput.AddVec4();
+	quadVertexInput.AddVec2();
 
 	unsigned int vbo;
 	glCreateBuffers(1, &vbo);
-
 	glNamedBufferData(vbo, sizeof(quadVerts), quadVerts, GL_STATIC_DRAW);
-	glVertexArrayVertexBuffer(quadVao, 0, vbo, 0, sizeof(float) * 6);
-	glVertexArrayAttribFormat(quadVao, 0, 4, GL_FLOAT, false, 0);
-	glVertexArrayAttribBinding(quadVao, 0, 0);
-	glEnableVertexArrayAttrib(quadVao, 0);
 
-	glVertexArrayAttribFormat(quadVao, 1, 2, GL_FLOAT, false, sizeof(float) * 4);
-	glVertexArrayAttribBinding(quadVao, 1, 0);
-	glEnableVertexArrayAttrib(quadVao, 1);
-
+	quadVertexInput.SetVertexBuffer(vbo, 0, sizeof(float) * 6, 0);
 }
 
 void Application::DrawFullScreenQuad()
 {
-	glBindVertexArray(quadVao);
+	quadVertexInput.Bind();
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 

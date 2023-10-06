@@ -365,3 +365,4 @@ FodyWeavers.xsd
 ShaderAlchemy/Output
 ShaderAlchemy/ffmpeg_bin/*.exe
 
+ShaderAlchemy/Models/
