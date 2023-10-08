@@ -1,6 +1,7 @@
 #include "ModelInputRenderPass.h"
 #include "application.h"
 #include <glm/gtc/matrix_transform.hpp>
+#include <filesystem>
 
 void ModelInputRenderPass::Init()
 {
@@ -43,21 +44,13 @@ void ModelInputRenderPass::Init()
 	}
 
 	shader->CompileShader();
-	shader->GetShaderUniformsInfo();
-
-	model = new Model;
-
-	if (!model->Load("Models\\FlightHelmet", "FlightHelmet.gltf"))
-	{
-		printf("Failed to load model\n");
-	}
 
 	vertexInput = &Application::instance->meshVertexInput;
 }
 
 void ModelInputRenderPass::Draw()
 {
-	if (shader->IsValid())
+	if (model != nullptr && shader->IsValid())
 	{
 		output->ClearAttachments({ 0, 0, 0, 1.0f }, 1.0f, 0);
 		output->Bind();
@@ -65,9 +58,8 @@ void ModelInputRenderPass::Draw()
 
 		glm::mat4 projectionMatrix = glm::perspectiveFov(glm::radians(90.0f),
 			float(output->width), float(output->height), 0.1f, 1000.0f);
-		glm::mat4 viewMatrix = glm::mat4(1.0f);
-
-		viewMatrix = glm::translate(glm::mat4(1.0f), { 0,0,-1 });
+		glm::vec3 cameraPos = { 0, -cameraOffsetY, ((cameraOffsetZ - (cameraOffsetZ * 3.5f))) };
+		auto viewMatrix = glm::lookAt(cameraPos, { 0, 0, 0 }, { 0, 1, 0 });
 
 		shader->UniformVec3("iResolution", glm::vec3{ float(output->width), float(output->height) , 0 });
 		shader->UniformFloat("iTime", Application::instance->time);
@@ -82,6 +74,17 @@ void ModelInputRenderPass::Draw()
 		{
 			vertexInput->SetIndexBuffer(mesh.buffer);
 			vertexInput->SetVertexBuffer(mesh.buffer, 0, sizeof(MeshVertex), 0);
+			if (model->textures.size() > 0)
+			{
+				if (model->textures[mesh.base_color_map] != nullptr) {
+					model->textures[mesh.base_color_map]->Bind(0);
+				}
+
+				if (model->textures[mesh.normal_map] != nullptr) {
+					model->textures[mesh.normal_map]->Bind(1);
+				}
+			}
+
 			glDrawElements(GL_TRIANGLES, mesh.indicesCount, GL_UNSIGNED_INT, mesh.indicesOffset);
 		}
 		glDisable(GL_DEPTH_TEST);
@@ -90,4 +93,193 @@ void ModelInputRenderPass::Draw()
 
 void ModelInputRenderPass::OnImGui()
 {
+	auto size = ImVec2{ 120, 120 };
+
+	ImGui::Text("Input Model");
+	ImGui::Image(0, size);
+
+	if (ImGui::BeginDragDropTarget())
+	{
+		auto payload = ImGui::AcceptDragDropPayload("dropped_files");
+		ImGui::EndDragDropTarget();
+
+		for (const auto& item : Application::instance->drop_items)
+		{
+			if (item.ends_with(".gltf") || item.ends_with(".fbx") || item.ends_with(".obj"))
+			{
+				auto m = new Model;
+
+				std::filesystem::path full_path(item);
+				auto root = full_path.parent_path().string();
+				auto file_name = full_path.filename().string();
+
+				if (!m->Load(root.c_str(), file_name.c_str()))
+				{
+					delete m;
+					continue;
+				}
+				
+				if (model) 
+				{
+					model->Destroy();
+					delete model;
+				}
+
+				model = m;
+
+				cameraOffsetY = abs(model->bounds.min.y) * 0.5f;
+				cameraOffsetZ = abs(model->bounds.min.z) * 2.5f;
+
+				break;
+			}
+		}
+
+		Application::instance->drop_items.clear();
+	}
+	
+	auto& uniforms = shader->GetUniforms();
+
+	for (size_t i = 0; i < uniforms.size(); i++)
+	{
+		auto& u = uniforms[i];
+
+		switch (u.type)
+		{
+		case ShaderUniformType::Float: 
+			ImGui::InputFloat(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);
+			break;
+		case ShaderUniformType::Int:
+			ImGui::InputInt(u.name.c_str(), (int*)u.backup);
+			shader->UpdateUniformFromBackup(i);
+			break;
+		case ShaderUniformType::Vec2:
+			ImGui::InputFloat2(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);;
+			break;
+		case ShaderUniformType::Vec3: 
+			ImGui::InputFloat3(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);;
+			break;
+		case ShaderUniformType::Vec4:
+			ImGui::ColorEdit4(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);;
+			break;
+		case ShaderUniformType::Mat2: break;
+		case ShaderUniformType::Mat3: break;
+		case ShaderUniformType::Mat4: break;
+		}
+
+	}
+
+	{
+		ImGui::Columns(2);
+
+		auto size = ImVec2{ 120, 120 };
+
+		for (int i = 0; i < channels.size(); i++)
+		{
+			if (i <= 7) continue;
+
+			ImGui::Text("Channel %d", i);
+
+			auto channel = channels[i];
+			auto is_image_clicked = false;
+
+			char buff[128];
+			sprintf_s(buff, "%sChannel%d%d", name.c_str(), i, int(this));
+			if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
+			{
+				is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)(channel->texture->id)), size, { 0, 1 }, { 1, 0 });
+			}
+			else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
+			{
+				is_image_clicked = ImGui::ImageButton(buff,
+					reinterpret_cast<void*>((unsigned long long)(
+						channel->pass->GetOutput()->attachments[0].id)), size, { 0, 1 }, { 1, 0 });
+			}
+			else
+			{
+				is_image_clicked = ImGui::ImageButton(buff, 0, size);
+			}
+
+			if (is_image_clicked)
+			{
+				open_channel_settings = true;
+				selected_channel = i;
+			}
+
+			if (ImGui::BeginDragDropTarget())
+			{
+				auto payload = ImGui::AcceptDragDropPayload("dropped_files");
+				ImGui::EndDragDropTarget();
+
+				for (const auto& item : Application::instance->drop_items)
+				{
+					if (item.ends_with(".png") || item.ends_with(".jpg") || item.ends_with(".jpeg"))
+					{
+						auto c = new Channel;
+						c->texture = new Texture;
+						if (!c->texture->Init(item))
+						{
+							delete c->texture;
+							delete c;
+							continue;
+						}
+						c->type = ChannelType::EXTERNAL_IMAGE;
+						SetChannel(i, c);
+						break;
+					}
+				}
+
+				Application::instance->drop_items.clear();
+			}
+
+			ImGui::NextColumn();
+		}
+
+		ImGui::Columns(1);
+
+		if (open_channel_settings)
+		{
+			ImGui::OpenPopup("ChannelSettings");
+			ImVec2 center(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+			ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+			if (ImGui::BeginPopupModal("ChannelSettings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
+			{
+				ImGui::Text("%s Channel %d Settings", GetName().c_str(), selected_channel);
+
+				auto c = GetChannel(selected_channel);
+
+				ImGui::Combo("Channel Type", (int*)(&c->type), "ImageFile\0RenderPass\0");
+
+				if (c->type == ChannelType::RENDERPASS)
+				{
+					static int current_item = 0;
+
+					if (ImGui::BeginCombo("Render Pass", c->pass ? c->pass->GetName().c_str() : "Select Render Pass"))
+					{
+						for (size_t i = 0; i < Application::instance->passes.size(); i++)
+						{
+							bool selected = c->pass == Application::instance->passes[i];
+							if (ImGui::Selectable(Application::instance->passes[i]->GetName().c_str(), selected))
+							{
+								c->pass = Application::instance->passes[i];
+							}
+						}
+						ImGui::EndCombo();
+					}
+				}
+				else
+				{
+					c->pass = nullptr;
+				}
+
+				ImGui::EndPopup();
+			}
+		}
+	}
+
+
+
 }

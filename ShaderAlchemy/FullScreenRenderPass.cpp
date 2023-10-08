@@ -37,7 +37,6 @@ void FullScreenRenderPass::Init()
 	}
 
 	shader->CompileShader();
-	shader->GetShaderUniformsInfo();
 }
 
 void FullScreenRenderPass::Draw()
@@ -56,6 +55,41 @@ void FullScreenRenderPass::Draw()
 
 void FullScreenRenderPass::OnImGui()
 {
+	auto& uniforms = shader->GetUniforms();
+
+	for (size_t i = 0; i < uniforms.size(); i++)
+	{
+		auto& u = uniforms[i];
+
+		switch (u.type)
+		{
+		case ShaderUniformType::Float:
+			ImGui::InputFloat(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);
+			break;
+		case ShaderUniformType::Int:
+			ImGui::InputInt(u.name.c_str(), (int*)u.backup);
+			shader->UpdateUniformFromBackup(i);
+			break;
+		case ShaderUniformType::Vec2:
+			ImGui::InputFloat2(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);;
+			break;
+		case ShaderUniformType::Vec3:
+			ImGui::InputFloat3(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);;
+			break;
+		case ShaderUniformType::Vec4:
+			ImGui::ColorEdit4(u.name.c_str(), (float*)u.backup);
+			shader->UpdateUniformFromBackup(i);;
+			break;
+		case ShaderUniformType::Mat2: break;
+		case ShaderUniformType::Mat3: break;
+		case ShaderUniformType::Mat4: break;
+		}
+
+	}
+
 	ImGui::Columns(2);
 
 	auto size = ImVec2{ 120, 120 };

@@ -16,4 +16,10 @@ public:
 private:
 	Model* model;
 	VertexInput* vertexInput;
+	
+	float cameraOffsetY;
+	float cameraOffsetZ;
+	bool open_channel_settings{ false };
+	int selected_channel{ 0 };
+
 };

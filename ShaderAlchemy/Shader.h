@@ -20,6 +20,7 @@ struct ShaderUniform {
 	std::string name;
 	ShaderUniformType type;
 	int size;
+	void* backup;
 };
 
 class Shader
@@ -50,9 +51,28 @@ public:
 	void UniformMat3(const char* name, const glm::mat3& value) const;
 	void UniformMat4(const char* name, const glm::mat4& value) const;
 
+	void UniformInt(int location, int value) const;
+	void UniformFloat(int location, float value)  const;
+	void UniformVec2(int location, const glm::vec2& value) const;
+	void UniformVec3(int location, const glm::vec3& value) const;
+	void UniformVec4(int location, const glm::vec4& value) const;
+	void UniformMat2(int location, const glm::mat2& value) const;
+	void UniformMat3(int location, const glm::mat3& value) const;
+	void UniformMat4(int location, const glm::mat4& value) const;
+
+	void UniformVec2(int location, float* value) const;
+	void UniformVec3(int location, float* value) const;
+	void UniformVec4(int location, float* value) const;
+	void UniformMat2(int location, float* value) const;
+	void UniformMat3(int location, float* value) const;
+	void UniformMat4(int location, float* value) const;
+
+	void UpdateUniformFromBackup(size_t index);
+
 	const std::string& GetName()  const { return name; }
 	const std::string& GetVertexSource() const { return vertexSource; }
 	const std::string& GetFragmentSource() const { return fragmentSource; }
+	const std::vector<ShaderUniform> GetUniforms() const { return uniforms; }
 
 private:
 	bool isValid {false };
@@ -64,4 +84,6 @@ private:
 	std::string name;
 	std::string vertexSource;
 	std::string fragmentSource;
+
+	char* backup_buffer;
 };

@@ -143,6 +143,7 @@ bool Shader::CompileShader()
 
 	isValid = true;
 
+	GetShaderUniformsInfo();
 	return true;
 }
 
@@ -151,7 +152,10 @@ void Shader::GetShaderUniformsInfo()
 	if (isValid) {
 		uniforms.clear();
 		int count = 0;
+		int size_in_bytes = 0;
+		int offset = 0;
 		glGetProgramiv(id, GL_ACTIVE_UNIFORMS, &count);
+
 		for (int i = 0; i < count; ++i)
 		{
 			char name[255];
@@ -166,7 +170,37 @@ void Shader::GetShaderUniformsInfo()
 				.size = size
 			};
 
+			int storage_size = 0;
+			switch (uniform.type)
+			{
+			case ShaderUniformType::Float: storage_size = sizeof(float); break;
+			case ShaderUniformType::Int: storage_size = sizeof(int); break;
+			case ShaderUniformType::Vec2: storage_size = sizeof(float) * 2; break;
+			case ShaderUniformType::Vec3: storage_size = sizeof(float) * 3; break;
+			case ShaderUniformType::Vec4: storage_size = sizeof(float) * 4; break;
+			case ShaderUniformType::Mat2: storage_size = sizeof(float) * 2 * 2; break;
+			case ShaderUniformType::Mat3: storage_size = sizeof(float) * 3 * 3; break;
+			case ShaderUniformType::Mat4: storage_size = sizeof(float) * 4 * 4; break;
+			case ShaderUniformType::Sampler2D: storage_size = sizeof(void*); break;
+			}
+
+			size_in_bytes += size * storage_size;
+			uniform.backup = (void*)offset;
+			offset = size * storage_size;
 			uniforms.push_back(uniform);
+		}
+
+		if (backup_buffer)
+		{
+			delete backup_buffer;
+		}
+
+		backup_buffer = new char[size_in_bytes];
+		memset(backup_buffer, 0, size_in_bytes);
+		for (int i = 0; i < count; ++i) {
+			auto& u = uniforms[i];
+			int storage_size = 0;
+			u.backup = (void*)((size_t)backup_buffer + (size_t)u.backup);
 		}
 	}
 }
@@ -257,5 +291,92 @@ void Shader::UniformMat4(const char* name, const glm::mat4& value) const
 	if (location >= 0)
 	{
 		glProgramUniformMatrix4fv(id, location, 1, false, glm::value_ptr(value));
+	}
+}
+
+void Shader::UniformInt(int location, int value) const
+{
+	glProgramUniform1i(id, location, value);
+}
+
+void Shader::UniformFloat(int location, float value) const
+{
+	glProgramUniform1f(id, location, value);
+}
+
+void Shader::UniformVec2(int location, const glm::vec2& value) const
+{
+	glProgramUniform2fv(id, location, 1, glm::value_ptr(value));
+}
+
+void Shader::UniformVec3(int location, const glm::vec3& value) const
+{
+	glProgramUniform3fv(id, location, 1, glm::value_ptr(value));
+}
+
+void Shader::UniformVec4(int location, const glm::vec4& value) const
+{
+	glProgramUniform4fv(id, location, 1, glm::value_ptr(value));
+}
+
+void Shader::UniformMat2(int location, const glm::mat2& value) const
+{
+	glProgramUniformMatrix2fv(id, location, 1, false, glm::value_ptr(value));
+}
+
+void Shader::UniformMat3(int location, const glm::mat3& value) const
+{
+	glProgramUniformMatrix3fv(id, location, 1, false, glm::value_ptr(value));
+}
+
+void Shader::UniformMat4(int location, const glm::mat4& value) const
+{
+	glProgramUniformMatrix4fv(id, location, 1, false, glm::value_ptr(value));
+}
+
+void Shader::UniformVec2(int location, float* value) const
+{
+	glProgramUniform2fv(id, location, 1, value);
+}
+
+void Shader::UniformVec3(int location, float* value) const
+{
+	glProgramUniform3fv(id, location, 1, value);
+}
+
+void Shader::UniformVec4(int location, float* value) const
+{
+	glProgramUniform4fv(id, location, 1, value);
+}
+
+void Shader::UniformMat2(int location, float* value) const
+{
+	glProgramUniformMatrix2fv(id, location, 1, false, value);
+}
+
+void Shader::UniformMat3(int location, float* value) const
+{
+	glProgramUniformMatrix3fv(id, location, 1, false, value);
+}
+
+void Shader::UniformMat4(int location, float* value) const
+{
+	glProgramUniformMatrix4fv(id, location, 1, false, value);
+}
+
+void Shader::UpdateUniformFromBackup(size_t index)
+{
+	auto& u = uniforms[index];
+	switch (u.type)
+	{
+	case ShaderUniformType::Float:	UniformFloat(u.location, ((float*)u.backup)[0]); break;
+	case ShaderUniformType::Int:	UniformInt(u.location, ((int*)u.backup)[0]); break;
+	case ShaderUniformType::Vec2:	UniformVec2(u.location, ((float*)u.backup)); break;
+	case ShaderUniformType::Vec3:	UniformVec3(u.location, ((float*)u.backup)); break;
+	case ShaderUniformType::Vec4:	UniformVec4(u.location, ((float*)u.backup)); break;
+	case ShaderUniformType::Mat2:	UniformMat2(u.location, ((float*)u.backup)); break;
+	case ShaderUniformType::Mat3:	UniformMat3(u.location, ((float*)u.backup)); break;
+	case ShaderUniformType::Mat4:	UniformMat4(u.location, ((float*)u.backup)); break;
+//	case ShaderUniformType::Sampler2D: storage_size = sizeof(void*); break;
 	}
 }

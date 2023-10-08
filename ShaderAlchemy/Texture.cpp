@@ -8,9 +8,17 @@ bool Texture::Init(const std::string& path)
 	auto data = stbi_load(path.c_str(), &w, &h, &c, 0);
 	if (data == nullptr) return false;
 
-	width = w;
-	height = h;
-	channels = c;
+	auto result = Init(w, h, c, data);
+
+	stbi_image_free(data);
+	return result;
+}
+
+bool Texture::Init(int width, int height, int channels, unsigned char* data)
+{
+	this->width = width;
+	this->height = height;
+	this->channels = channels;
 
 	int internalFormat{ GL_RGBA8 };
 	int pixelFormat{ GL_RGBA };
@@ -36,7 +44,6 @@ bool Texture::Init(const std::string& path)
 	glTextureStorage2D(id, 1, internalFormat, width, height);
 	glTextureSubImage2D(id, 0, 0, 0, width, height, pixelFormat, GL_UNSIGNED_BYTE, data);
 
-	stbi_image_free(data);
 	return true;
 }
 

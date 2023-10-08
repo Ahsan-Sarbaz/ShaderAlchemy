@@ -697,7 +697,6 @@ void EditorPanel::OnImGui()
 			}
 
 			shader->CompileShader();
-			shader->GetShaderUniformsInfo();
 
 			undoIndexOnDisk = editor->GetUndoIndex();
 		}
