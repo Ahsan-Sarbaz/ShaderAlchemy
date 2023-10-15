@@ -2,6 +2,7 @@
 #include "application.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <filesystem>
+#include <glm/gtc/type_ptr.hpp>
 
 void ModelInputRenderPass::Init()
 {
@@ -11,78 +12,78 @@ void ModelInputRenderPass::Init()
 	ss << "ModelInputRenderPass_" << Application::Get()->GetPassCount() + 1;
 	name = ss.str();
 
-	auto fb = new Framebuffer;
+	auto width = Application::instance->preview_fb->GetWidth();
+	auto height = Application::instance->preview_fb->GetHeight();
 
-	std::vector<FramebufferAttachment> attachments;
-	attachments.push_back(FramebufferAttachment{
-		.format = GL_RGBA8,
-		.type = FramebufferAttachmentType::Color
-		});
+	output = new Framebuffer(width, height);
+	output->AddAttachment(Format::RGBA8);
+	output->AddDepthStencil();
+	output->Resize(width, height);
 
-	attachments.push_back(FramebufferAttachment{
-		.format = GL_DEPTH24_STENCIL8,
-		.type = FramebufferAttachmentType::DepthStencil
-		});
-
-	auto width = Application::instance->preview_fb->width;
-	auto height = Application::instance->preview_fb->height;
-
-	fb->Init(width, height, attachments);
-	output = fb;
-
-	shader = new Shader;
-	shader->Init("ModeInputBase");
-	std::string source;
-	if (read_entire_file("Shaders\\ModelInputVertex.glsl", source))
 	{
-		shader->AttachVertexShader(source);
+		shader = new ShaderProgramSource;
+		std::string source;
+		if (read_entire_file("Shaders\\ModelInputVertex.glsl", source))
+		{
+			auto vs = new Shader(ShaderType::Vertex, source);
+			shader->AttachShader(vs);
+			shader->SetVertexSource(source);
+		}
+
+		if (read_entire_file("Shaders\\ModelInputFragment.glsl", source))
+		{
+			auto fs = new Shader(ShaderType::Fragment, source);
+			shader->AttachShader(fs);
+			shader->SetFragmentSource(source);
+		}
+
+		shader->Link();
+		shader->SetName("Model Input");
 	}
 
-	if (read_entire_file("Shaders\\ModelInputFragment.glsl", source))
-	{
-		shader->AttachFragmentShader(source);
-	}
-
-	shader->CompileShader();
-
-	vertexInput = &Application::instance->meshVertexInput;
+	vertexInput = new VertexInput();
+	vertexInput->AddVec3();
+	vertexInput->AddVec3();
+	vertexInput->AddVec3();
+	vertexInput->AddVec3();
+	vertexInput->AddVec2();
 }
 
 void ModelInputRenderPass::Draw()
 {
 	if (model != nullptr && shader->IsValid())
 	{
-		output->ClearAttachments({ 0, 0, 0, 1.0f }, 1.0f, 0);
+		output->ClearAttachments();
 		output->Bind();
 		shader->Bind();
 
 		glm::mat4 projectionMatrix = glm::perspectiveFov(glm::radians(90.0f),
-			float(output->width), float(output->height), 0.1f, 1000.0f);
+			float(output->GetWidth()), float(output->GetHeight()), 0.1f, 1000.0f);
 		glm::vec3 cameraPos = { 0, -cameraOffsetY, ((cameraOffsetZ - (cameraOffsetZ * 3.5f))) };
 		auto viewMatrix = glm::lookAt(cameraPos, { 0, 0, 0 }, { 0, 1, 0 });
 
-		shader->UniformVec3("iResolution", glm::vec3{ float(output->width), float(output->height) , 0 });
+		auto resolution = glm::vec3{ float(output->GetWidth()), float(output->GetHeight()) , 0 };
+
+		shader->UniformVec3("iResolution", glm::value_ptr(resolution));
 		shader->UniformFloat("iTime", Application::instance->time);
-		shader->UniformMat4("u_ProjectionMatrix", projectionMatrix);
-		shader->UniformMat4("u_ViewMatrix", viewMatrix);
-		shader->UniformMat4("u_ModelMatrix", model->transform);
+		shader->UniformMat4("u_ProjectionMatrix", glm::value_ptr(projectionMatrix));
+		shader->UniformMat4("u_ViewMatrix", glm::value_ptr(viewMatrix));
+		shader->UniformMat4("u_ModelMatrix", glm::value_ptr(model->transform));
 		shader->Bind();
 
 		glEnable(GL_DEPTH_TEST);
 		vertexInput->Bind();
 		for (const auto& mesh : model->meshes)
 		{
-			vertexInput->SetIndexBuffer(mesh.buffer);
-			vertexInput->SetVertexBuffer(mesh.buffer, 0, sizeof(MeshVertex), 0);
-			if (model->textures.size() > 0)
+			vertexInput->SetIndexBuffer(*mesh.buffer);
+			vertexInput->SetVertexBuffer(*mesh.buffer, 0, sizeof(MeshVertex), 0);
+			if (mesh.base_color_map != nullptr)
 			{
-				if (model->textures[mesh.base_color_map] != nullptr) {
-					model->textures[mesh.base_color_map]->Bind(0);
-				}
-
-				if (model->textures[mesh.normal_map] != nullptr) {
-					model->textures[mesh.normal_map]->Bind(1);
-				}
+				mesh.base_color_map->Bind(0);
+			}
+			if (mesh.normal_map != nullptr)
+			{
+				mesh.normal_map->Bind(1);
 			}
 
 			glDrawElements(GL_TRIANGLES, mesh.indicesCount, GL_UNSIGNED_INT, mesh.indicesOffset);
@@ -137,41 +138,6 @@ void ModelInputRenderPass::OnImGui()
 		Application::instance->drop_items.clear();
 	}
 	
-	auto& uniforms = shader->GetUniforms();
-
-	for (size_t i = 0; i < uniforms.size(); i++)
-	{
-		auto& u = uniforms[i];
-
-		switch (u.type)
-		{
-		case ShaderUniformType::Float: 
-			ImGui::InputFloat(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);
-			break;
-		case ShaderUniformType::Int:
-			ImGui::InputInt(u.name.c_str(), (int*)u.backup);
-			shader->UpdateUniformFromBackup(i);
-			break;
-		case ShaderUniformType::Vec2:
-			ImGui::InputFloat2(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);;
-			break;
-		case ShaderUniformType::Vec3: 
-			ImGui::InputFloat3(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);;
-			break;
-		case ShaderUniformType::Vec4:
-			ImGui::ColorEdit4(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);;
-			break;
-		case ShaderUniformType::Mat2: break;
-		case ShaderUniformType::Mat3: break;
-		case ShaderUniformType::Mat4: break;
-		}
-
-	}
-
 	{
 		ImGui::Columns(2);
 
@@ -190,13 +156,14 @@ void ModelInputRenderPass::OnImGui()
 			sprintf_s(buff, "%sChannel%d%d", name.c_str(), i, int(this));
 			if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
 			{
-				is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)(channel->texture->id)), size, { 0, 1 }, { 1, 0 });
+				is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)(channel->texture->GetID())), size, { 0, 1 }, { 1, 0 });
 			}
 			else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
 			{
+				auto id = channel->pass->GetOutput()->GetColorAttachments()[0]->GetID();
+
 				is_image_clicked = ImGui::ImageButton(buff,
-					reinterpret_cast<void*>((unsigned long long)(
-						channel->pass->GetOutput()->attachments[0].id)), size, { 0, 1 }, { 1, 0 });
+					reinterpret_cast<void*>((unsigned long long)(id)), size, { 0, 1 }, { 1, 0 });
 			}
 			else
 			{
@@ -219,13 +186,7 @@ void ModelInputRenderPass::OnImGui()
 					if (item.ends_with(".png") || item.ends_with(".jpg") || item.ends_with(".jpeg"))
 					{
 						auto c = new Channel;
-						c->texture = new Texture;
-						if (!c->texture->Init(item))
-						{
-							delete c->texture;
-							delete c;
-							continue;
-						}
+						c->texture = new Texture2D(item.c_str(), false);
 						c->type = ChannelType::EXTERNAL_IMAGE;
 						SetChannel(i, c);
 						break;

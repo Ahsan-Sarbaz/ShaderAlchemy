@@ -4,14 +4,10 @@
 #include <assimp/postprocess.h>
 #include <GL/glew.h>
 #include <execution>
+#include <sstream>
 #include <stb_image.h>
-
-int Model::PromiseTexture(const char* path)
-{
-	int index = (int)promisedTexturePaths.size();
-	promisedTexturePaths.push_back(std::string(path));
-	return index;
-}
+#include "JinGL/TextureLoader.h"
+#include "JinGL/Buffer.h"
 
 void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root)
 {
@@ -33,16 +29,13 @@ void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root)
 			indices.push_back(face.mIndices[j]);
 	}
 
-	unsigned int buffer = 0;
-	glCreateBuffers(1, &buffer);
-
 	auto verticesSize = sizeof(MeshVertex) * vertices.size();
 	auto indicesSize = sizeof(unsigned int) * indices.size();
 	auto indicesOffset = verticesSize;
 
-	glNamedBufferStorage(buffer, indicesSize + verticesSize, nullptr, GL_DYNAMIC_STORAGE_BIT);
-	glNamedBufferSubData(buffer, 0, verticesSize, vertices.data());
-	glNamedBufferSubData(buffer, indicesOffset, indicesSize, indices.data());
+	auto buffer = new Buffer(verticesSize + indicesSize, nullptr, true);
+	buffer->SubData(verticesSize, 0, vertices.data());
+	buffer->SubData(indicesSize, indicesOffset, indices.data());
 
 	Mesh gpuMesh = {
 		.buffer = buffer,
@@ -59,14 +52,18 @@ void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root)
 	{
 		aiString path;
 		mat->GetTexture(aiTextureType_BASE_COLOR, 0, &path);
-		gpuMesh.base_color_map = PromiseTexture(path.C_Str());
+		std::stringstream ss;
+		ss << root << "\\" << path.C_Str();
+		gpuMesh.base_color_map = TextureLoader::Load(ss.str());
 	}
 
 	if (mat->GetTextureCount(aiTextureType_NORMAL_CAMERA) > 0)
 	{
 		aiString path;
 		mat->GetTexture(aiTextureType_NORMAL_CAMERA, 0, &path);
-		gpuMesh.normal_map = PromiseTexture(path.C_Str());
+		std::stringstream ss;
+		ss << root << "\\" << path.C_Str();
+		gpuMesh.normal_map = TextureLoader::Load(ss.str());
 	}
 
 
@@ -113,48 +110,18 @@ bool Model::Load(const char* root, const char* filename)
 		bounds.max = glm::max(bounds.max, mesh.bounds.max);
 	}
 
-	struct PromisedTexture {
-		int width, height, channels;
-		unsigned char* data;
-	};
-
-	std::vector<PromisedTexture> promisedTextures;
-
-	std::for_each(std::execution::par_unseq, promisedTexturePaths.begin(), promisedTexturePaths.end(),
-		[&](const std::string& path) {
-			
-			char textureFullPath[256];
-			sprintf(textureFullPath, "%s\\%s", root, path.c_str());
-			PromisedTexture t = {};
-			t.data = (unsigned char*)stbi_load(textureFullPath, &t.width, &t.height, &t.channels, 0);
-			promisedTextures.push_back(t);
-		});
-
-	promisedTexturePaths.clear();
-
-	for (const auto& t : promisedTextures)
-	{
-		auto new_texture = new Texture;
-		if (!new_texture->Init(t.width, t.height, t.channels, t.data))
-		{
-			printf("Failed to Load Texture");
-		}
-		textures.push_back(new_texture);
-	}
+	TextureLoader::Get()->LoadPromisedTextures();
 	
 	return true;
 }
 
 void Model::Destroy()
 {
-	for (const auto& t : textures)
-	{
-		glDeleteTextures(1, &t->id);
-	}
-
 	for (int i = 0; i < meshes.size(); i++)
 	{
-		glDeleteBuffers(1, &meshes[i].buffer);
+		delete meshes[i].base_color_map;
+		delete meshes[i].normal_map;
+		delete meshes[i].buffer;
 	}
 
 	meshes.clear();

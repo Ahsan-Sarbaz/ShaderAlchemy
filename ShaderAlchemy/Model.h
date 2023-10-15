@@ -2,7 +2,8 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
-#include "Texture.h"
+#include "JinGL/Buffer.h"
+#include "JinGL/Texture2D.h"
 
 struct MeshVertex {
 	glm::vec3 position;
@@ -19,12 +20,12 @@ struct AABB {
 
 struct Mesh
 {
-	unsigned int buffer;
+	Buffer* buffer;
 	void* indicesOffset;
 	unsigned int indicesCount;
 	AABB bounds;
-	int base_color_map;
-	int normal_map;
+	Texture2D* base_color_map;
+	Texture2D* normal_map;
 };
 
 struct aiMesh;
@@ -34,8 +35,6 @@ struct aiNode;
 struct Model
 {
 	std::vector<Mesh> meshes;
-	std::vector<Texture*> textures;
-	std::vector<std::string> promisedTexturePaths;
 	glm::mat4 transform;
 	AABB bounds;
 
@@ -43,7 +42,6 @@ struct Model
 
 	void Destroy();
 
-	int PromiseTexture(const char* path);
 	void ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root);
 	void ProcessNode(aiNode* node, const aiScene* scene, const char* root);
 

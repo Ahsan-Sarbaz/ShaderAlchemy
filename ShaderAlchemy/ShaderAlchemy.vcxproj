@@ -132,31 +132,40 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="application.cpp" />
-    <ClCompile Include="Framebuffer.cpp" />
     <ClCompile Include="FullScreenRenderPass.cpp" />
     <ClCompile Include="ImGuiTextColorEditor.cpp" />
+    <ClCompile Include="JinGL\Buffer.cpp" />
+    <ClCompile Include="JinGL\Debug.cpp" />
+    <ClCompile Include="JinGL\Framebuffer.cpp" />
+    <ClCompile Include="JinGL\Shader.cpp" />
+    <ClCompile Include="JinGL\Texture2D.cpp" />
+    <ClCompile Include="JinGL\TextureLoader.cpp" />
+    <ClCompile Include="JinGL\VertexInput.cpp" />
     <ClCompile Include="LanguageDefinations.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="ModelInputRenderPass.cpp" />
     <ClCompile Include="RenderPass.cpp" />
-    <ClCompile Include="Shader.cpp" />
+    <ClCompile Include="ShaderProgramSource.cpp" />
     <ClCompile Include="stb_image.cpp" />
-    <ClCompile Include="Texture.cpp" />
-    <ClCompile Include="VertexInput.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="application.h" />
     <ClInclude Include="FontAwesom6.h" />
-    <ClInclude Include="Framebuffer.h" />
     <ClInclude Include="FullScreenRenderPass.h" />
     <ClInclude Include="ImGuiTextColorEditor.h" />
+    <ClInclude Include="JinGL\Buffer.h" />
+    <ClInclude Include="JinGL\Debug.h" />
+    <ClInclude Include="JinGL\Framebuffer.h" />
+    <ClInclude Include="JinGL\GL.h" />
+    <ClInclude Include="JinGL\Shader.h" />
+    <ClInclude Include="JinGL\Texture2D.h" />
+    <ClInclude Include="JinGL\TextureLoader.h" />
+    <ClInclude Include="JinGL\VertexInput.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="ModelInputRenderPass.h" />
     <ClInclude Include="RenderPass.h" />
-    <ClInclude Include="Shader.h" />
-    <ClInclude Include="Texture.h" />
-    <ClInclude Include="VertexInput.h" />
+    <ClInclude Include="ShaderProgramSource.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

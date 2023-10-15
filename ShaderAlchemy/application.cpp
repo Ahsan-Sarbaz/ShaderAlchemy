@@ -11,13 +11,15 @@
 #include <algorithm>
 #include <array>
 
+#include "JinGL/Debug.h"
+
 #include "FullScreenRenderPass.h"
 #include "ModelInputRenderPass.h"
 
-extern "C" {
-	__declspec(dllexport) int NvOptimusEnablement = 1;
-	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-}
+//extern "C" {
+//	__declspec(dllexport) int NvOptimusEnablement = 1;
+//	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+//}
 
 Application* Application::instance = nullptr;
 
@@ -32,109 +34,6 @@ bool read_entire_file(const std::filesystem::path& path, std::string& string)
 	string = std::move(ss.str());
 	return true;
 }
-
-void gl_debug_message_callback(GLenum source,
-	GLenum type,
-	GLuint id,
-	GLenum severity,
-	GLsizei length,
-	const GLchar* message,
-	const void* userParam)
-{
-	const char* _source;
-	const char* _type;
-	const char* _severity;
-
-	switch (source) {
-	case GL_DEBUG_SOURCE_API:
-		_source = "API";
-		break;
-
-	case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
-		_source = "WINDOW SYSTEM";
-		break;
-
-	case GL_DEBUG_SOURCE_SHADER_COMPILER:
-		_source = "SHADER COMPILER";
-		break;
-
-	case GL_DEBUG_SOURCE_THIRD_PARTY:
-		_source = "THIRD PARTY";
-		break;
-
-	case GL_DEBUG_SOURCE_APPLICATION:
-		_source = "APPLICATION";
-		break;
-
-	case GL_DEBUG_SOURCE_OTHER:
-		_source = "UNKNOWN";
-		break;
-
-	default:
-		_source = "UNKNOWN";
-		break;
-	}
-
-	switch (type) {
-	case GL_DEBUG_TYPE_ERROR:
-		_type = "ERROR";
-		break;
-
-	case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
-		_type = "DEPRECATED BEHAVIOR";
-		break;
-
-	case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
-		_type = "UDEFINED BEHAVIOR";
-		break;
-
-	case GL_DEBUG_TYPE_PORTABILITY:
-		_type = "PORTABILITY";
-		break;
-
-	case GL_DEBUG_TYPE_PERFORMANCE:
-		_type = "PERFORMANCE";
-		break;
-
-	case GL_DEBUG_TYPE_OTHER:
-		_type = "OTHER";
-		break;
-
-	case GL_DEBUG_TYPE_MARKER:
-		_type = "MARKER";
-		break;
-
-	default:
-		_type = "UNKNOWN";
-		break;
-	}
-
-	switch (severity) {
-	case GL_DEBUG_SEVERITY_HIGH:
-		_severity = "HIGH";
-		break;
-
-	case GL_DEBUG_SEVERITY_MEDIUM:
-		_severity = "MEDIUM";
-		break;
-
-	case GL_DEBUG_SEVERITY_LOW:
-		_severity = "LOW";
-		break;
-
-	case GL_DEBUG_SEVERITY_NOTIFICATION:
-		_severity = "NOTIFICATION";
-		break;
-
-	default:
-		_severity = "UNKNOWN";
-		break;
-	}
-
-	printf("%d: %s of %s severity, raised from %s: %s\n",
-		id, _type, _severity, _source, message);
-}
-
 
 void Application::Init() {
 
@@ -188,11 +87,7 @@ void Application::Init() {
 		return;
 	}
 
-	glDebugMessageCallback(gl_debug_message_callback, 0);
-	glEnable(GL_DEBUG_OUTPUT);
-	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-	glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_FALSE);
-	glDebugMessageControl(GL_DEBUG_SOURCE_API, GL_DEBUG_TYPE_ERROR, GL_DONT_CARE, 0, NULL, GL_TRUE);
+	EnableDebugMessages();
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -230,44 +125,35 @@ void Application::Init() {
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
-	InitQuadVoa();
+	preview_fb = new Framebuffer(int(window_size.x), int(window_size.y));
+	preview_fb->AddAttachment(Format::RGBA8);
+	preview_fb->Resize(int(window_size.x), int(window_size.y));
 
-	preview_fb = new Framebuffer;
 	{
-		std::vector<FramebufferAttachment> attachments;
-		attachments.push_back(FramebufferAttachment{
-				.format = GL_RGBA8,
-				.type = FramebufferAttachmentType::Color
-			});
-
-		preview_fb->Init(int(window_size.x), int(window_size.y), attachments);
-	}
-
-	preview_shader = new Shader();
-	{
-		preview_shader->Init("Preview Shader");
+		preview_shader = new ShaderProgram;
 		std::string source;
 		if (read_entire_file("Shaders\\PreviewVertex.glsl", source))
-			preview_shader->AttachVertexShader(source);
+		{
+			auto vs = new Shader(ShaderType::Vertex, source);
+			preview_shader->AttachShader(vs);
+		}
 
 		if (read_entire_file("Shaders\\PreviewFragment.glsl", source))
-			preview_shader->AttachFragmentShader(source);
+		{
+			auto fs = new Shader(ShaderType::Fragment, source);
+			preview_shader->AttachShader(fs);
+		}
 
-		preview_shader->CompileShader();
+		preview_shader->Link();
 	}
+
+	InitQuadVoa();
 
 	if(!std::filesystem::exists(screenshot_output_directory))
 		std::filesystem::create_directories(screenshot_output_directory);
 
 	if (!std::filesystem::exists(video_output_directory))
 		std::filesystem::create_directories(video_output_directory);
-
-	meshVertexInput.Init();
-	meshVertexInput.AddVec3(); // position
-	meshVertexInput.AddVec3(); // normal
-	meshVertexInput.AddVec3(); // tangent
-	meshVertexInput.AddVec3(); // bi-tangent
-	meshVertexInput.AddVec2(); // uv
 
 	Run();
 	Shutdown();
@@ -594,11 +480,12 @@ void Application::Run() {
 			ImGui::PopStyleColor();
 
 			avail = ImGui::GetContentRegionAvail();
-			if (avail.x != preview_fb->width || avail.y != preview_fb->height)
+			if (avail.x != preview_fb->GetWidth() || avail.y != preview_fb->GetHeight())
 			{
 				OnPreviewResized(int(avail.x), int(avail.y));
 			}
-			ImGui::Image(reinterpret_cast<void*>((unsigned long long)preview_fb->attachments[0].id), avail, { 0, 1 }, { 1, 0 });
+			auto id = preview_fb->GetColorAttachments()[0]->GetID();
+			ImGui::Image(reinterpret_cast<void*>((unsigned long long)id), avail, { 0, 1 }, { 1, 0 });
 			
 		}
 		ImGui::End();
@@ -689,14 +576,20 @@ void EditorPanel::OnImGui()
 
 			if (type == EditorPanelType::VertexShader)
 			{
-				shader->AttachVertexShader(editor->GetText());
+				auto source = editor->GetText();
+				auto vs = new Shader(ShaderType::Vertex, source);
+				shader->AttachShader(vs);
+				shader->SetVertexSource(source);
 			}
 			else if (type == EditorPanelType::FragmentShader)
 			{
-				shader->AttachFragmentShader(editor->GetText());
+				auto source = editor->GetText();
+				auto fs = new Shader(ShaderType::Fragment, source);
+				shader->AttachShader(fs);
+				shader->SetFragmentSource(source);
 			}
 
-			shader->CompileShader();
+			shader->Link();
 
 			undoIndexOnDisk = editor->GetUndoIndex();
 		}
@@ -778,20 +671,17 @@ void Application::InitQuadVoa()
 		 1,  1,  0, 1, 1, 1	// 3
 	};
 
-	quadVertexInput.Init();
-	quadVertexInput.AddVec4();
-	quadVertexInput.AddVec2();
+	quadVertexInput = new VertexInput();
+	quadVertexInput->AddVec4();
+	quadVertexInput->AddVec2();
 
-	unsigned int vbo;
-	glCreateBuffers(1, &vbo);
-	glNamedBufferData(vbo, sizeof(quadVerts), quadVerts, GL_STATIC_DRAW);
-
-	quadVertexInput.SetVertexBuffer(vbo, 0, sizeof(float) * 6, 0);
+	Buffer* buffer = new Buffer(sizeof(quadVerts), quadVerts, false);
+	quadVertexInput->SetVertexBuffer(*buffer, 0, sizeof(float) * 6, 0);
 }
 
 void Application::DrawFullScreenQuad()
 {
-	quadVertexInput.Bind();
+	quadVertexInput->Bind();
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
@@ -812,7 +702,7 @@ void Application::DrawAllPasses()
 	if (selectedRenderPass && selectedRenderPass->GetOutput())
 	{
 		preview_fb->Bind();
-		glBindTextureUnit(0, selectedRenderPass->GetOutput()->attachments[0].id);
+		selectedRenderPass->GetOutput()->GetColorAttachments()[0]->Bind(0);
 		preview_shader->Bind();
 		DrawFullScreenQuad();
 	}
@@ -844,7 +734,7 @@ void Application::OnPreviewResized(int width, int height)
 
 void Application::OnRecord(int width, int height, int recording_time, int frame_rate, float speed)
 {
-	auto last_preview_size = glm::ivec2{ preview_fb->width, preview_fb->height };
+	auto last_preview_size = glm::ivec2{ preview_fb->GetWidth(), preview_fb->GetHeight()};
 
 	auto buffer_size = width * height;
 	auto cpu_side_buffer = new int[buffer_size];
@@ -889,7 +779,7 @@ void Application::OnRecord(int width, int height, int recording_time, int frame_
 
 void Application::OnTakeScreenShot(int width, int height)
 {
-	auto last_preview_size = glm::ivec2{ preview_fb->width, preview_fb->height };
+	auto last_preview_size = glm::ivec2{ preview_fb->GetWidth(), preview_fb->GetHeight()};
 
 	auto buffer_size = width * height;
 	auto cpu_side_buffer = new int[buffer_size];

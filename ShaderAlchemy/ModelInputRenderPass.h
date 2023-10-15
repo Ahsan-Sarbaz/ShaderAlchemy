@@ -1,7 +1,7 @@
 #pragma once
 #include "RenderPass.h"
 #include "Model.h"
-#include "VertexInput.h"
+#include "JinGL/VertexInput.h"
 
 class ModelInputRenderPass : public RenderPass {
 

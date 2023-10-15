@@ -1,5 +1,6 @@
 #include "FullScreenRenderPass.h"
 #include "application.h"
+#include <glm/gtc/type_ptr.hpp>
 
 void FullScreenRenderPass::Init()
 {
@@ -9,45 +10,45 @@ void FullScreenRenderPass::Init()
 	ss << "FullScreenRenderPass_" << Application::Get()->GetPassCount() + 1;
 	name = ss.str();
 
-	auto fb = new Framebuffer;
+	auto width = Application::instance->preview_fb->GetWidth();
+	auto height = Application::instance->preview_fb->GetHeight();
 
-	std::vector<FramebufferAttachment> attachments;
-	attachments.push_back(FramebufferAttachment{
-		.format = GL_RGBA8,
-		.type = FramebufferAttachmentType::Color
-		});
+	output = new Framebuffer(width, height);
+	output->AddAttachment(Format::RGBA8);
+	output->Resize(width, height);
 
-	auto width = Application::instance->preview_fb->width;
-	auto height = Application::instance->preview_fb->height;
-
-	fb->Init(width, height, attachments);
-	output = fb;
-
-	shader = new Shader;
-	shader->Init("ShaderToyBase");
-	std::string source;
-	if (read_entire_file("Shaders\\ShaderToyBaseVertex.glsl", source))
 	{
-		shader->AttachVertexShader(source);
-	}
+		shader = new ShaderProgramSource;
+		std::string source;
+		if (read_entire_file("Shaders\\ShaderToyBaseVertex.glsl", source))
+		{
+			auto vs = new Shader(ShaderType::Vertex, source);
+			shader->AttachShader(vs);
+			shader->SetVertexSource(source);
+		}
 
-	if (read_entire_file("Shaders\\ShaderToyBaseFragment.glsl", source))
-	{
-		shader->AttachFragmentShader(source);
-	}
+		if (read_entire_file("Shaders\\ShaderToyBaseFragment.glsl", source))
+		{
+			auto fs = new Shader(ShaderType::Fragment, source);
+			shader->AttachShader(fs);
+			shader->SetFragmentSource(source);
+		}
 
-	shader->CompileShader();
+		shader->Link();
+		shader->SetName("Full Screen");
+	}
 }
 
 void FullScreenRenderPass::Draw()
 {
 	if (shader->IsValid())
 	{
-		output->ClearColorAttachments({ 0, 0, 0, 1.0f });
+		output->ClearAttachments();
 		output->Bind();
 		shader->Bind();
 
-		shader->UniformVec3("iResolution", glm::vec3{ float(output->width), float(output->height) , 0 });
+		auto resolution = glm::vec3{ float(output->GetWidth()), float(output->GetHeight()) , 0 };
+		shader->UniformVec3("iResolution", glm::value_ptr(resolution));
 		shader->UniformFloat("iTime", Application::instance->time);
 		Application::instance->DrawFullScreenQuad();
 	}
@@ -56,39 +57,6 @@ void FullScreenRenderPass::Draw()
 void FullScreenRenderPass::OnImGui()
 {
 	auto& uniforms = shader->GetUniforms();
-
-	for (size_t i = 0; i < uniforms.size(); i++)
-	{
-		auto& u = uniforms[i];
-
-		switch (u.type)
-		{
-		case ShaderUniformType::Float:
-			ImGui::InputFloat(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);
-			break;
-		case ShaderUniformType::Int:
-			ImGui::InputInt(u.name.c_str(), (int*)u.backup);
-			shader->UpdateUniformFromBackup(i);
-			break;
-		case ShaderUniformType::Vec2:
-			ImGui::InputFloat2(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);;
-			break;
-		case ShaderUniformType::Vec3:
-			ImGui::InputFloat3(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);;
-			break;
-		case ShaderUniformType::Vec4:
-			ImGui::ColorEdit4(u.name.c_str(), (float*)u.backup);
-			shader->UpdateUniformFromBackup(i);;
-			break;
-		case ShaderUniformType::Mat2: break;
-		case ShaderUniformType::Mat3: break;
-		case ShaderUniformType::Mat4: break;
-		}
-
-	}
 
 	ImGui::Columns(2);
 
@@ -105,13 +73,14 @@ void FullScreenRenderPass::OnImGui()
 		sprintf_s(buff, "%sChannel%d%d", name.c_str(), i, int(this));
 		if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
 		{
-			is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)(channel->texture->id)), size, { 0, 1 }, { 1, 0 });
+			is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)
+				(channel->texture->GetID())), size, { 0, 1 }, { 1, 0 });
 		}
 		else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
 		{
+			auto id = channel->pass->GetOutput()->GetColorAttachments()[0]->GetID();
 			is_image_clicked = ImGui::ImageButton(buff,
-				reinterpret_cast<void*>((unsigned long long)(
-					channel->pass->GetOutput()->attachments[0].id)), size, { 0, 1 }, { 1, 0 });
+				reinterpret_cast<void*>((unsigned long long)(id)), size, { 0, 1 }, { 1, 0 });
 		}
 		else
 		{
@@ -134,13 +103,7 @@ void FullScreenRenderPass::OnImGui()
 				if (item.ends_with(".png") || item.ends_with(".jpg") || item.ends_with(".jpeg"))
 				{
 					auto c = new Channel;
-					c->texture = new Texture;
-					if (!c->texture->Init(item))
-					{
-						delete c->texture;
-						delete c;
-						continue;
-					}
+					c->texture = new Texture2D(item.c_str(), true);
 					c->type = ChannelType::EXTERNAL_IMAGE;
 					SetChannel(i, c);
 					break;

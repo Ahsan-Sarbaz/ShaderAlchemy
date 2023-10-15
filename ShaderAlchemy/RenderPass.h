@@ -1,7 +1,7 @@
 #pragma once
-#include "Shader.h"
-#include "Texture.h"
-#include "Framebuffer.h"
+#include "ShaderProgramSource.h"
+#include "JinGL/Texture2D.h"
+#include "JinGL/Framebuffer.h"
 #include <array>
 
 enum class ChannelType : int
@@ -19,7 +19,7 @@ struct Channel
 	union
 	{
 		RenderPass* pass;
-		Texture* texture;
+		Texture2D* texture;
 	};
 };
 
@@ -31,14 +31,14 @@ public:
 	virtual void Draw() = 0;
 	virtual void OnImGui() = 0;
 	
-	void SetShader(Shader* shader) { this->shader = shader; }
+	void SetShader(ShaderProgramSource* shader) { this->shader = shader; }
 
 	void Resize(int width, int height);
 
 	void SetName(const std::string& name) { this->name = name; }
 	const std::string& GetName() { return name; }
 	Framebuffer* GetOutput() { return output; }
-	Shader* GetShader() { return shader; }
+	ShaderProgramSource* GetShader() { return shader; }
 	
 	void SetChannel(int index, Channel* channel);
 	Channel* GetChannel(int index) { return channels[index]; }
@@ -46,7 +46,7 @@ public:
 
 protected:
 	Framebuffer* output { nullptr };
-	Shader* shader{ nullptr };
+	ShaderProgramSource* shader{ nullptr };
 	std::string name;
 	std::array<Channel*, 16> channels{};
 };

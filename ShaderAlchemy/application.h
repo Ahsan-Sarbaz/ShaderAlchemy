@@ -9,7 +9,8 @@
 #include <filesystem>
 
 #include "RenderPass.h"
-#include "VertexInput.h"
+#include "JinGL/VertexInput.h"
+#include "JinGL/Framebuffer.h"
 
 enum class EditorPanelType 
 {
@@ -49,8 +50,7 @@ struct Application
 	uint64_t frames{};
 	uint64_t fps{};
 
-	VertexInput quadVertexInput;
-	VertexInput meshVertexInput;
+	VertexInput* quadVertexInput;
 
 	std::vector<EditorPanel*> editors;
 	std::vector<RenderPass*> passes;
@@ -59,7 +59,7 @@ struct Application
 	RenderPass* selectedRenderPass{};
 
 	Framebuffer* preview_fb;
-	Shader* preview_shader;
+	ShaderProgram* preview_shader;
 
 	std::filesystem::path screenshot_output_directory = "Output\\ScreenShots\\";
 	std::filesystem::path video_output_directory = "Output\\Videos\\";

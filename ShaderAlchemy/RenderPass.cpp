@@ -23,7 +23,6 @@ void RenderPass::SetChannel(int index, Channel* channel) {
 	{
 		if (c->type == ChannelType::EXTERNAL_IMAGE && c->texture)
 		{
-			c->texture->Destroy();
 			delete c->texture;
 		}
 		delete c;
@@ -42,7 +41,7 @@ void RenderPass::BindChannels(int offset) {
 			}
 			else if (c->type == ChannelType::RENDERPASS && c->pass)
 			{
-				c->pass->GetOutput()->BindAttachment(0, int(i) + offset);
+				c->pass->GetOutput()->GetColorAttachments()[i]->Bind(int(i) + offset);
 			}
 		}
 	}
