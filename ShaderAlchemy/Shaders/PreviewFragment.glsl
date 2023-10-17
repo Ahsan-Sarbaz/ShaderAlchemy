@@ -1,13 +1,13 @@
-#version 330 core
+#version 450 core
 
 out vec4 FinalColor;
 
 in vec2 v_uv;
 
-uniform sampler2D inputColorAttachment;
+layout (binding = 0) uniform sampler2D iLastPass;
 
 void main()
 {
-	FinalColor = texture(inputColorAttachment, v_uv);
+	FinalColor = texture(iLastPass, v_uv);
 }
 
