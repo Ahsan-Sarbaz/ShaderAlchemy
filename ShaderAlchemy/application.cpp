@@ -15,13 +15,15 @@
 
 #include "FullScreenRenderPass.h"
 #include "ModelInputRenderPass.h"
+#include <regex>
 
-//extern "C" {
-//	__declspec(dllexport) int NvOptimusEnablement = 1;
-//	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-//}
+extern "C" {
+	__declspec(dllexport) int NvOptimusEnablement = 1;
+	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
 
 Application* Application::instance = nullptr;
+
 
 bool read_entire_file(const std::filesystem::path& path, std::string& string) 
 {
@@ -144,7 +146,7 @@ void Application::Init() {
 			preview_shader->AttachShader(fs);
 		}
 
-		preview_shader->Link();
+		preview_shader->Link(nullptr, nullptr);
 	}
 
 	InitQuadVoa();
@@ -154,6 +156,8 @@ void Application::Init() {
 
 	if (!std::filesystem::exists(video_output_directory))
 		std::filesystem::create_directories(video_output_directory);
+
+	console = new ImGuiConsole();
 
 	Run();
 	Shutdown();
@@ -543,6 +547,8 @@ void Application::Run() {
 
 		ImGui::End();
 
+		console->Draw("Console");
+
 		// Rendering
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		ImGui::Render();
@@ -589,7 +595,46 @@ void EditorPanel::OnImGui()
 				shader->SetFragmentSource(source);
 			}
 
-			shader->Link();
+			char* infoLog;
+
+			if (!shader->Link(&infoLog, nullptr))
+			{
+				std::vector<std::string> errors;
+				char* token = strtok(infoLog, "\n");
+				while (token != NULL)
+				{
+					if (std::regex_search(std::string(token), std::regex(R"(((ERROR: \d:\d*:) | (\s*:\s*error)))")))
+						errors.emplace_back(std::string(token));
+					token = strtok(NULL, "\n");
+				}
+				
+				delete[] infoLog;
+
+				std::map<int, std::string> errorMarkers;
+				for (auto& error : errors)
+				{
+					std::string expression = R"((?::|\()\d*(?::|\)))";
+					auto regexp = std::regex(expression);
+					std::smatch match;
+					std::regex_search(error, match, regexp);
+					regexp = std::regex(R"(\d+)");
+					auto line = match[0].str();
+					std::smatch match2;
+					std::regex_search(line, match2, regexp);
+					line = match2[0].str();
+					int num = std::stoi(line);
+					auto newError = std::regex_replace(error, std::regex(expression), (":" + std::to_string(num) + ":"));
+					
+					errorMarkers.insert(std::make_pair<int, std::string>(int(num), std::string(newError)));
+					Application::instance->console->AddLog("%s\n", newError.c_str());
+				}
+
+				editor->SetErrorMarkers(errorMarkers);
+			}
+			else
+			{
+				editor->SetErrorMarkers({});
+			}
 
 			undoIndexOnDisk = editor->GetUndoIndex();
 		}
@@ -617,7 +662,7 @@ void Application::CreateEditorPanel(RenderPass* renderPass)
 	{
 		auto ep = new EditorPanel;
 		ep->editor = new TextEditor;
-		ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinitionId::Glsl);
+		ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinition::Glsl());
 		ep->editor->SetText(shader->GetVertexSource());
 		ep->name = shader->GetName() + " [VS]";
 		ep->renderPass = renderPass;
@@ -628,7 +673,7 @@ void Application::CreateEditorPanel(RenderPass* renderPass)
 	{
 		auto ep = new EditorPanel;
 		ep->editor = new TextEditor;
-		ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinitionId::Glsl);
+		ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinition::Glsl());
 		ep->editor->SetText(shader->GetFragmentSource());
 		ep->name = shader->GetName() + " [FS]";
 		ep->renderPass = renderPass;
@@ -643,8 +688,6 @@ void Application::CreateFullScreenRenderPass()
 	auto rp = new FullScreenRenderPass;
 	rp->Init();
 	passes.push_back(rp);
-
-	// TODO: move this someplace sane
 	CreateEditorPanel(rp);
 }
 
@@ -653,8 +696,6 @@ void Application::CreateModelInputRenderPass()
 	auto rp = new ModelInputRenderPass;
 	rp->Init();
 	passes.push_back(rp);
-
-	// TODO: move this someplace sane
 	CreateEditorPanel(rp);
 }
 

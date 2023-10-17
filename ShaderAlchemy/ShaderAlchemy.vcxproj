@@ -132,6 +132,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="application.cpp" />
+    <ClCompile Include="ImGuiConsole.cpp" />
     <ClCompile Include="FullScreenRenderPass.cpp" />
     <ClCompile Include="ImGuiTextColorEditor.cpp" />
     <ClCompile Include="JinGL\Buffer.cpp" />
@@ -151,6 +152,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="application.h" />
+    <ClInclude Include="ImGuiConsole.h" />
     <ClInclude Include="FontAwesom6.h" />
     <ClInclude Include="FullScreenRenderPass.h" />
     <ClInclude Include="ImGuiTextColorEditor.h" />

@@ -37,7 +37,7 @@ void ModelInputRenderPass::Init()
 			shader->SetFragmentSource(source);
 		}
 
-		shader->Link();
+		shader->Link(nullptr, nullptr);
 		shader->SetName("Model Input");
 	}
 

@@ -11,6 +11,7 @@
 #include "RenderPass.h"
 #include "JinGL/VertexInput.h"
 #include "JinGL/Framebuffer.h"
+#include "ImGuiConsole.h"
 
 enum class EditorPanelType 
 {
@@ -28,8 +29,6 @@ struct EditorPanel
 	int undoIndexOnDisk{0};
 	void OnImGui();
 };
-
-
 
 struct Application
 {
@@ -60,6 +59,7 @@ struct Application
 
 	Framebuffer* preview_fb;
 	ShaderProgram* preview_shader;
+	ImGuiConsole* console;
 
 	std::filesystem::path screenshot_output_directory = "Output\\ScreenShots\\";
 	std::filesystem::path video_output_directory = "Output\\Videos\\";

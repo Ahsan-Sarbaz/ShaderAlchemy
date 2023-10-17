@@ -66,6 +66,9 @@
     <ClCompile Include="ShaderProgramSource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ImGuiConsole.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="application.h">
@@ -114,6 +117,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ShaderProgramSource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGuiConsole.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

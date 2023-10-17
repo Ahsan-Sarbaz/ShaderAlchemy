@@ -34,7 +34,7 @@ void FullScreenRenderPass::Init()
 			shader->SetFragmentSource(source);
 		}
 
-		shader->Link();
+		shader->Link(nullptr, nullptr);
 		shader->SetName("Full Screen");
 	}
 }
