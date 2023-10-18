@@ -17,6 +17,12 @@ private:
 	Model* model;
 	VertexInput* vertexInput;
 	
+	glm::vec3 cameraPosition{};
+	glm::vec3 cameraRotation{};
+
+	glm::vec3 objectPosition{};
+	glm::vec3 objectRotation{};
+
 	float cameraOffsetY;
 	float cameraOffsetZ;
 	bool open_channel_settings{ false };
