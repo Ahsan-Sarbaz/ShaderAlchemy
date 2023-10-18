@@ -35,7 +35,6 @@ struct aiNode;
 struct Model
 {
 	std::vector<Mesh> meshes;
-	glm::mat4 transform;
 	AABB bounds;
 
 	bool Load(const char* root, const char* filename);

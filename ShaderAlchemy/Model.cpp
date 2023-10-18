@@ -56,11 +56,27 @@ void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root)
 		ss << root << "\\" << path.C_Str();
 		gpuMesh.base_color_map = TextureLoader::Load(ss.str());
 	}
+	else if(mat->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+	{
+		aiString path;
+		mat->GetTexture(aiTextureType_DIFFUSE, 0, &path);
+		std::stringstream ss;
+		ss << root << "\\" << path.C_Str();
+		gpuMesh.base_color_map = TextureLoader::Load(ss.str());
+	}
 
 	if (mat->GetTextureCount(aiTextureType_NORMAL_CAMERA) > 0)
 	{
 		aiString path;
 		mat->GetTexture(aiTextureType_NORMAL_CAMERA, 0, &path);
+		std::stringstream ss;
+		ss << root << "\\" << path.C_Str();
+		gpuMesh.normal_map = TextureLoader::Load(ss.str());
+	}
+	else if (mat->GetTextureCount(aiTextureType_NORMALS) > 0)
+	{
+		aiString path;
+		mat->GetTexture(aiTextureType_NORMALS, 0, &path);
 		std::stringstream ss;
 		ss << root << "\\" << path.C_Str();
 		gpuMesh.normal_map = TextureLoader::Load(ss.str());
@@ -100,7 +116,6 @@ bool Model::Load(const char* root, const char* filename)
 	}
 
 	ProcessNode(scene->mRootNode, scene, root);
-	transform = glm::mat4(1.0f);
 
 	bounds.min = meshes[0].bounds.min;
 	bounds.max = meshes[0].bounds.max;

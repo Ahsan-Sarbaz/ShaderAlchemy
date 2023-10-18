@@ -7,8 +7,8 @@ in vec3 v_tangent;
 in vec3 v_bitangent;
 in vec2 v_uv;
 
-layout (binding = 0) uniform sampler2D iChannel0;
-layout (binding = 1) uniform sampler2D iChannel1;
+layout (binding = 0) uniform sampler2D BaseColorMap;
+layout (binding = 1) uniform sampler2D NormalMap;
 layout (binding = 2) uniform sampler2D iChannel2;
 layout (binding = 3) uniform sampler2D iChannel3;
 layout (binding = 4) uniform sampler2D iChannel4;

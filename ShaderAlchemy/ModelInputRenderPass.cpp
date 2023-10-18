@@ -62,13 +62,25 @@ void ModelInputRenderPass::Draw()
 		glm::vec3 cameraPos = { 0, -cameraOffsetY, ((cameraOffsetZ - (cameraOffsetZ * 3.5f))) };
 		auto viewMatrix = glm::lookAt(cameraPos, { 0, 0, 0 }, { 0, 1, 0 });
 
+		viewMatrix = glm::rotate(viewMatrix, glm::radians(cameraRotation.x), { 1, 0, 0});
+		viewMatrix = glm::rotate(viewMatrix, glm::radians(cameraRotation.y), { 0, 1, 0});
+		viewMatrix = glm::rotate(viewMatrix, glm::radians(cameraRotation.z), { 0, 0, 1});
+		viewMatrix = glm::translate(viewMatrix, cameraPosition);
+
 		auto resolution = glm::vec3{ float(output->GetWidth()), float(output->GetHeight()) , 0 };
 
 		shader->UniformVec3("iResolution", glm::value_ptr(resolution));
 		shader->UniformFloat("iTime", Application::instance->time);
 		shader->UniformMat4("u_ProjectionMatrix", glm::value_ptr(projectionMatrix));
 		shader->UniformMat4("u_ViewMatrix", glm::value_ptr(viewMatrix));
-		shader->UniformMat4("u_ModelMatrix", glm::value_ptr(model->transform));
+
+		auto modelMatrix = glm::mat4(1.0);
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(objectRotation.x), { 1, 0, 0 });
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(objectRotation.y), { 0, 1, 0 });
+		modelMatrix = glm::rotate(modelMatrix, glm::radians(objectRotation.z), { 0, 0, 1 });
+		modelMatrix = glm::translate(modelMatrix, objectPosition);
+
+		shader->UniformMat4("u_ModelMatrix", glm::value_ptr(modelMatrix));
 		shader->Bind();
 
 		glEnable(GL_DEPTH_TEST);
@@ -96,7 +108,14 @@ void ModelInputRenderPass::OnImGui()
 {
 	auto size = ImVec2{ 120, 120 };
 
-	ImGui::Text("Input Model");
+	ImGui::SeparatorText("Camera");
+	ImGui::DragFloat3("Position", glm::value_ptr(cameraPosition));
+	ImGui::DragFloat3("Rotation", glm::value_ptr(cameraRotation));
+	ImGui::SeparatorText("Object");
+	ImGui::DragFloat3("Object Position", glm::value_ptr(objectPosition));
+	ImGui::DragFloat3("Object Rotation", glm::value_ptr(objectRotation));
+
+	ImGui::SeparatorText("Model Input");
 	ImGui::Image(0, size);
 
 	if (ImGui::BeginDragDropTarget())
@@ -138,6 +157,8 @@ void ModelInputRenderPass::OnImGui()
 		Application::instance->drop_items.clear();
 	}
 	
+	ImGui::SeparatorText("Channels");
+
 	{
 		ImGui::Columns(2);
 
@@ -206,7 +227,7 @@ void ModelInputRenderPass::OnImGui()
 			ImGui::OpenPopup("ChannelSettings");
 			ImVec2 center(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
 			ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-			if (ImGui::BeginPopupModal("ChannelSettings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
+			if (ImGui::BeginPopupModal("Channel Settings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
 			{
 				ImGui::Text("%s Channel %d Settings", GetName().c_str(), selected_channel);
 

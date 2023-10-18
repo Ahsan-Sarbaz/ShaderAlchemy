@@ -56,7 +56,7 @@ void FullScreenRenderPass::Draw()
 
 void FullScreenRenderPass::OnImGui()
 {
-	auto& uniforms = shader->GetUniforms();
+	ImGui::SeparatorText("Channels");
 
 	ImGui::Columns(2);
 
@@ -120,7 +120,7 @@ void FullScreenRenderPass::OnImGui()
 
 	if (open_channel_settings) 
 	{
-		ImGui::OpenPopup("ChannelSettings");
+		ImGui::OpenPopup("Channel Settings");
 		ImVec2 center(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 		if (ImGui::BeginPopupModal("ChannelSettings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
