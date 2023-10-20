@@ -13,6 +13,15 @@ void ImGuiConsole::Clear()
 	LineOffsets.push_back(0);
 }
 
+void ImGuiConsole::AddLog(const char* fmt, va_list args)
+{
+	int old_size = Buf.size();
+	Buf.appendfv(fmt, args);
+	for (int new_size = Buf.size(); old_size < new_size; old_size++)
+		if (Buf[old_size] == '\n')
+			LineOffsets.push_back(old_size + 1);
+}
+
 void ImGuiConsole::AddLog(const char* fmt, ...)
 {
 	int old_size = Buf.size();

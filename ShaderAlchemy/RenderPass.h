@@ -12,7 +12,6 @@ enum class ChannelType : int
 
 class RenderPass;
 
-// TODO: make this into something sane
 struct Channel
 {
 	ChannelType type;

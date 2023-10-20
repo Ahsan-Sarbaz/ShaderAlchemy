@@ -46,6 +46,8 @@ struct Application
 	float time{};
 	float dt{};
 
+	float frameRate;
+
 	uint64_t frames{};
 	uint64_t fps{};
 
@@ -60,6 +62,10 @@ struct Application
 	Framebuffer* preview_fb;
 	ShaderProgram* preview_shader;
 	ImGuiConsole* console;
+	
+	bool mouse_left_button;
+	bool mouse_right_button;
+	glm::vec2 mouse_position;
 
 	std::filesystem::path screenshot_output_directory = "Output\\ScreenShots\\";
 	std::filesystem::path video_output_directory = "Output\\Videos\\";
@@ -86,6 +92,8 @@ struct Application
 	void OnTakeScreenShot(int width, int height);
 
 	size_t GetPassCount() { return passes.size(); }
+
+	static void Log(const char* fmt, ...);
 };
 
 bool read_entire_file(const std::filesystem::path& path, std::string& string);

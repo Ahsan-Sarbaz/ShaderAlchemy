@@ -8,17 +8,42 @@
 #include <stb_image.h>
 #include "JinGL/TextureLoader.h"
 #include "JinGL/Buffer.h"
+#include <set>
 
 void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root)
 {
 	std::vector<MeshVertex> vertices(mesh->mNumVertices);
-	for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
+	std::fill(vertices.begin(), vertices.end(), MeshVertex{
+			{0,0,0},
+			{0,0,0},
+			{0,0,0},
+			{0,0,0},
+			{0,0},
+		});
+
+	if (mesh->HasPositions())
 	{
-		vertices[i].position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
-		vertices[i].normal = { mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
-		vertices[i].tangent = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
-		vertices[i].bitangent = { mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z };
-		vertices[i].uv = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
+		for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
+		{
+			vertices[i].position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
+		}
+	}
+
+	if (mesh->HasTangentsAndBitangents())
+	{
+		for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
+		{
+			vertices[i].tangent = { mesh->mTangents[i].x, mesh->mTangents[i].y, mesh->mTangents[i].z };
+			vertices[i].bitangent = { mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z };
+		}
+	}
+
+	if (mesh->HasTextureCoords(0))
+	{
+		for (unsigned int i = 0; i < mesh->mNumVertices; ++i)
+		{
+			vertices[i].uv = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
+		}
 	}
 
 	std::vector<unsigned int> indices;
@@ -44,44 +69,116 @@ void Model::ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root)
 		.bounds = {
 			.min = {mesh->mAABB.mMin.x, mesh->mAABB.mMin.y, mesh->mAABB.mMin.z},
 			.max = {mesh->mAABB.mMax.x, mesh->mAABB.mMax.y, mesh->mAABB.mMax.z},
-		}
+		},
+		.textures = {},
+		.visible = true
 	};
 
-	auto mat = scene->mMaterials[mesh->mMaterialIndex];
-	if (mat->GetTextureCount(aiTextureType_BASE_COLOR) > 0)
+	if (scene->HasMaterials())
 	{
-		aiString path;
-		mat->GetTexture(aiTextureType_BASE_COLOR, 0, &path);
-		std::stringstream ss;
-		ss << root << "\\" << path.C_Str();
-		gpuMesh.base_color_map = TextureLoader::Load(ss.str());
-	}
-	else if(mat->GetTextureCount(aiTextureType_DIFFUSE) > 0)
-	{
-		aiString path;
-		mat->GetTexture(aiTextureType_DIFFUSE, 0, &path);
-		std::stringstream ss;
-		ss << root << "\\" << path.C_Str();
-		gpuMesh.base_color_map = TextureLoader::Load(ss.str());
-	}
+		auto mat = scene->mMaterials[mesh->mMaterialIndex];
+		if (mat->GetTextureCount(aiTextureType_BASE_COLOR) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_BASE_COLOR, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[0] = TextureLoader::Load(ss.str());
+		}
+		else if (mat->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_DIFFUSE, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[0] = TextureLoader::Load(ss.str());
+		}
 
-	if (mat->GetTextureCount(aiTextureType_NORMAL_CAMERA) > 0)
-	{
-		aiString path;
-		mat->GetTexture(aiTextureType_NORMAL_CAMERA, 0, &path);
-		std::stringstream ss;
-		ss << root << "\\" << path.C_Str();
-		gpuMesh.normal_map = TextureLoader::Load(ss.str());
-	}
-	else if (mat->GetTextureCount(aiTextureType_NORMALS) > 0)
-	{
-		aiString path;
-		mat->GetTexture(aiTextureType_NORMALS, 0, &path);
-		std::stringstream ss;
-		ss << root << "\\" << path.C_Str();
-		gpuMesh.normal_map = TextureLoader::Load(ss.str());
-	}
+		if (mat->GetTextureCount(aiTextureType_SPECULAR) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_SPECULAR, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[1] = TextureLoader::Load(ss.str());
+		}
+		else if (mat->GetTextureCount(aiTextureType_METALNESS) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_METALNESS, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[1] = TextureLoader::Load(ss.str());
+		}
 
+		if (mat->GetTextureCount(aiTextureType_NORMAL_CAMERA) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_NORMAL_CAMERA, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[2] = TextureLoader::Load(ss.str());
+		}
+		else if (mat->GetTextureCount(aiTextureType_NORMALS) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_NORMALS, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[2] = TextureLoader::Load(ss.str());
+		}
+
+		if (mat->GetTextureCount(aiTextureType_SHININESS) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_SHININESS, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[3] = TextureLoader::Load(ss.str());
+		}
+		else if (mat->GetTextureCount(aiTextureType_DIFFUSE_ROUGHNESS) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_DIFFUSE_ROUGHNESS, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[3] = TextureLoader::Load(ss.str());
+		}
+
+		if (mat->GetTextureCount(aiTextureType_AMBIENT_OCCLUSION) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_AMBIENT_OCCLUSION, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[4] = TextureLoader::Load(ss.str());
+		}
+		else if (mat->GetTextureCount(aiTextureType_LIGHTMAP) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_LIGHTMAP, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[4] = TextureLoader::Load(ss.str());
+		}
+
+		if (mat->GetTextureCount(aiTextureType_EMISSION_COLOR) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_EMISSION_COLOR, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[5] = TextureLoader::Load(ss.str());
+		}
+		else if (mat->GetTextureCount(aiTextureType_EMISSIVE) > 0)
+		{
+			aiString path;
+			mat->GetTexture(aiTextureType_EMISSIVE, 0, &path);
+			std::stringstream ss;
+			ss << root << "\\" << path.C_Str();
+			gpuMesh.textures[5] = TextureLoader::Load(ss.str());
+		}
+	}
 
 	meshes.push_back(gpuMesh);
 }
@@ -125,18 +222,34 @@ bool Model::Load(const char* root, const char* filename)
 		bounds.max = glm::max(bounds.max, mesh.bounds.max);
 	}
 
-	TextureLoader::Get()->LoadPromisedTextures();
+	if (scene->HasMaterials())
+	{
+		TextureLoader::Get()->LoadPromisedTextures();
+	}
 	
 	return true;
 }
 
 void Model::Destroy()
 {
+	std::set<Texture2D*> unique_textures;
+
 	for (int i = 0; i < meshes.size(); i++)
 	{
-		delete meshes[i].base_color_map;
-		delete meshes[i].normal_map;
+		for (int j = 0; j < 6; j++)
+		{
+			if (meshes[i].textures[j] != nullptr)
+			{
+				unique_textures.insert(meshes[i].textures[j]);
+			}
+		}
+
 		delete meshes[i].buffer;
+	}
+
+	for (auto& t : unique_textures)
+	{
+		delete t;
 	}
 
 	meshes.clear();

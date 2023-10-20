@@ -47,9 +47,47 @@ void FullScreenRenderPass::Draw()
 		output->Bind();
 		shader->Bind();
 
-		auto resolution = glm::vec3{ float(output->GetWidth()), float(output->GetHeight()) , 0 };
-		shader->UniformVec3("iResolution", glm::value_ptr(resolution));
-		shader->UniformFloat("iTime", Application::instance->time);
+		auto app = Application::instance;
+
+		float resolution[3] = { float(output->GetWidth()), float(output->GetHeight()) , 0.0f };
+		float mouseInput[4] = { app->mouse_position.x, app->mouse_position.y,
+			app->mouse_left_button, app->mouse_right_button };
+
+		{
+			float channelResolutions[16 * 3] = {};
+			float channelTimes[16] = {};
+
+			int i = 0;
+			for (auto& c : channels)
+			{
+				if (c == nullptr || c->texture == nullptr) continue;
+				if (c->type == ChannelType::EXTERNAL_IMAGE)
+				{
+					channelResolutions[i + 0] = (float)c->texture->GetWidth();
+					channelResolutions[i + 1] = (float)c->texture->GetHeight();
+					channelResolutions[i + 2] = 0.0f;
+				}
+				else if (c->type == ChannelType::RENDERPASS)
+				{
+					channelResolutions[i + 0] = (float)c->pass->GetOutput()->GetWidth();
+					channelResolutions[i + 1] = (float)c->pass->GetOutput()->GetHeight();
+					channelResolutions[i + 2] = 0.0f;
+				}
+
+				channelTimes[i] = app->time;
+				i++;
+			}
+
+			shader->UniformVec3Array("iChannelResolution", 16, channelResolutions);
+			shader->UniformVec3Array("iChannelTime", 16, channelTimes);
+		}
+
+		shader->UniformVec3("iResolution", resolution);
+		shader->UniformFloat("iTime", app->time);
+		shader->UniformFloat("iFrameRate", app->frameRate);
+		shader->UniformInt("iFrame", int(app->frames));
+		shader->UniformFloat("iTimeDelta", app->dt);
+		shader->UniformVec4("iMouse", mouseInput);
 		Application::instance->DrawFullScreenQuad();
 	}
 }
@@ -123,7 +161,7 @@ void FullScreenRenderPass::OnImGui()
 		ImGui::OpenPopup("Channel Settings");
 		ImVec2 center(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-		if (ImGui::BeginPopupModal("ChannelSettings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
+		if (ImGui::BeginPopupModal("Channel Settings", &open_channel_settings, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			ImGui::Text("%s Channel %d Settings", GetName().c_str(), selected_channel);
 

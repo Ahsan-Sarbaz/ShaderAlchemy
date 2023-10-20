@@ -22,6 +22,7 @@ private:
 
 	glm::vec3 objectPosition{};
 	glm::vec3 objectRotation{};
+	glm::vec3 objectScale{1.0f, 1.0f ,1.0f};
 
 	float cameraOffsetY;
 	float cameraOffsetZ;

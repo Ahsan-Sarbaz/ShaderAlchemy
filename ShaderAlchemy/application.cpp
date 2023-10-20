@@ -224,10 +224,13 @@ void Application::Run() {
 	bool open_channel_settings = false;
 	int selected_channel = 0;
 
+	mouse_position = { 0, 0 };
+
 	while (!glfwWindowShouldClose(window) && running)
 	{
 		auto this_frame_time = (float)glfwGetTime();
 		dt = this_frame_time - last_frame_time;
+		frameRate = 1.0f / dt;
 
 		if (playing)
 		{
@@ -246,6 +249,18 @@ void Application::Run() {
 		last_frame_time = this_frame_time;
 
 		glfwPollEvents();
+
+
+		{
+			mouse_left_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+			mouse_right_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+			if (mouse_left_button)
+			{
+				double x, y;
+				glfwGetCursorPos(window, &x, &y);
+				mouse_position = { float(x), float(y) };
+			}
+		}
 
 		// TODO: have a mode where we can only see the output of the selected pass and its input pass and so on
 		// that way we can see per pass progress and also for performance reasons too
@@ -844,4 +859,12 @@ void Application::OnTakeScreenShot(int width, int height)
 
 	delete[] cpu_side_buffer;
 	OnPreviewResized(last_preview_size.x, last_preview_size.y);
+}
+
+void Application::Log(const char* fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	instance->console->AddLog(fmt, args);
+	va_end(args);
 }

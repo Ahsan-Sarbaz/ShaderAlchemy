@@ -4,15 +4,14 @@ out vec4 FinalColor;
 
 in vec2 iScreenQuadUV;
 
-uniform vec3 iResolution;	// viewport resolution (in pixels)
-uniform float iTime;	// shader playback time (in seconds)
-uniform float iTimeDelta;	// render time (in seconds)
-uniform int iFrame;	// shader playback frame
-//uniform float iChannelTime[4];      // channel playback time (in seconds)
-//uniform vec3 iChannelResolution[4]; // channel resolution (in pixels)
-uniform vec4 iMouse;                // mouse pixel coords. xy: current (if MLB down), zw: click
-//uniform vec4 iDate;                 // (year, month, day, time in seconds)
-//uniform float iSampleRate;           // sound sample rate (i.e., 44100)
+uniform vec3	iResolution;			// viewport resolution (in pixels)
+uniform float	iTime;					// shader playback time (in seconds)
+uniform float	iTimeDelta;				// render time (in seconds)
+uniform float	iFrameRate;				// shader frame rate
+uniform int		iFrame;					// shader playback frame
+uniform float	iChannelTime[16];		// channel playback time (in seconds)
+uniform vec3	iChannelResolution[16];	// channel resolution (in pixels)
+uniform vec4	iMouse;					// mouse pixel coords. xy: current (if MLB down), zw: click
 
 layout (binding = 0) uniform sampler2D iChannel0;
 layout (binding = 1) uniform sampler2D iChannel1;

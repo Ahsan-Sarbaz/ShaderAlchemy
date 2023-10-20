@@ -41,7 +41,7 @@ void RenderPass::BindChannels(int offset) {
 			}
 			else if (c->type == ChannelType::RENDERPASS && c->pass)
 			{
-				c->pass->GetOutput()->GetColorAttachments()[i]->Bind(int(i) + offset);
+				c->pass->GetOutput()->GetColorAttachments()[0]->Bind(int(i) + offset);
 			}
 		}
 	}

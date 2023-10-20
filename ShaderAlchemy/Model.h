@@ -24,8 +24,8 @@ struct Mesh
 	void* indicesOffset;
 	unsigned int indicesCount;
 	AABB bounds;
-	Texture2D* base_color_map;
-	Texture2D* normal_map;
+	Texture2D* textures[6];
+	bool visible;
 };
 
 struct aiMesh;
