@@ -2,14 +2,13 @@
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
-#include "JinGL/Buffer.h"
 #include "JinGL/Texture2D.h"
+#include "Geometry.h"
 
 struct MeshVertex {
 	glm::vec3 position;
 	glm::vec3 normal;
 	glm::vec3 tangent;
-	glm::vec3 bitangent;
 	glm::vec2 uv;
 };
 
@@ -20,12 +19,11 @@ struct AABB {
 
 struct Mesh
 {
-	Buffer* buffer;
-	void* indicesOffset;
-	unsigned int indicesCount;
+	Geometry* geometry;
 	AABB bounds;
 	Texture2D* textures[6];
 	bool visible;
+	glm::mat4 transform;
 };
 
 struct aiMesh;
@@ -37,11 +35,10 @@ struct Model
 	std::vector<Mesh> meshes;
 	AABB bounds;
 
-	bool Load(const char* root, const char* filename);
+	bool Load(const char* root, const char* filename, float scale = 1.0f);
 
 	void Destroy();
 
-	void ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root);
-	void ProcessNode(aiNode* node, const aiScene* scene, const char* root);
-
+	void ProcessMesh(aiMesh* mesh, const aiScene* scene, const char* root, const glm::mat4& transform);
+	void ProcessNode(aiNode* node, const aiScene* scene, const char* root, const glm::mat4& transform);
 };

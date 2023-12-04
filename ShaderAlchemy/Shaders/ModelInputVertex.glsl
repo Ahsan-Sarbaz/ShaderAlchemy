@@ -3,8 +3,7 @@
 layout (location = 0) in vec3 position;
 layout (location = 1) in vec3 normal;
 layout (location = 2) in vec3 tangent;
-layout (location = 3) in vec3 bitangent;
-layout (location = 4) in vec2 uv;
+layout (location = 3) in vec2 uv;
 
 out vec3 v_normal;
 out vec3 v_tangent;
@@ -18,8 +17,8 @@ uniform mat4 u_ModelMatrix;
 void main()
 {
 	v_normal = normal;
-	v_tangent = tangent;
-	v_bitangent = bitangent;
+	v_tangent = normalize(tangent - dot(tangent, normal) * normal);
+	v_bitangent = cross(normal, tangent);
 	v_uv = uv;
 	gl_Position = u_ProjectionMatrix * u_ViewMatrix * u_ModelMatrix * vec4(position, 1);
 }

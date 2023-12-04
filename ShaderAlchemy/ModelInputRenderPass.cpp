@@ -45,7 +45,6 @@ void ModelInputRenderPass::Init()
 	vertexInput->AddVec3();
 	vertexInput->AddVec3();
 	vertexInput->AddVec3();
-	vertexInput->AddVec3();
 	vertexInput->AddVec2();
 }
 
@@ -135,8 +134,7 @@ void ModelInputRenderPass::Draw()
 			if (!mesh.visible)
 				continue;
 
-			vertexInput->SetIndexBuffer(*mesh.buffer);
-			vertexInput->SetVertexBuffer(*mesh.buffer, 0, sizeof(MeshVertex), 0);
+			mesh.geometry->Bind(vertexInput, sizeof(MeshVertex));
 			
 			for (int i = 0; i < 5; i++)
 			{
@@ -146,7 +144,7 @@ void ModelInputRenderPass::Draw()
 				}
 			}
 
-			glDrawElements(GL_TRIANGLES, mesh.indicesCount, GL_UNSIGNED_INT, mesh.indicesOffset);
+			glDrawElements(GL_TRIANGLES, mesh.geometry->GetIndicesCount(), GL_UNSIGNED_INT, mesh.geometry->GetIndicesOffset());
 		}
 		glDisable(GL_DEPTH_TEST);
 	}
