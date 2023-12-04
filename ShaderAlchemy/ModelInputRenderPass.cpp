@@ -16,7 +16,7 @@ void ModelInputRenderPass::Init()
 	auto height = Application::instance->preview_fb->GetHeight();
 
 	output = new Framebuffer(width, height);
-	output->AddAttachment(Format::RGBA8);
+	output->AddAttachment(Format::RGBA8, true);
 	output->AddDepthStencil();
 	output->Resize(width, height);
 
@@ -281,8 +281,8 @@ void ModelInputRenderPass::OnImGui()
 				}
 				else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
 				{
-					auto id = channel->pass->GetOutput()->GetColorAttachments()[0]->GetID();
-
+					auto& [texture, is_draw] = channel->pass->GetOutput()->GetColorAttachments()[0];
+					auto id = texture->GetID();
 					is_image_clicked = ImGui::ImageButton(buff,
 						reinterpret_cast<void*>((unsigned long long)(id)), size, { 0, 1 }, { 1, 0 });
 				}

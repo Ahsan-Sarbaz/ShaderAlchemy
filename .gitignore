@@ -366,3 +366,5 @@ ShaderAlchemy/Output
 ShaderAlchemy/ffmpeg_bin/*.exe
 
 ShaderAlchemy/Models/
+ShaderAlchemy/docs_modified/
+ShaderAlchemy/DoxyFile

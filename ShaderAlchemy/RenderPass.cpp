@@ -41,7 +41,8 @@ void RenderPass::BindChannels(int offset) {
 			}
 			else if (c->type == ChannelType::RENDERPASS && c->pass)
 			{
-				c->pass->GetOutput()->GetColorAttachments()[0]->Bind(int(i) + offset);
+				auto& [texture, is_draw] = c->pass->GetOutput()->GetColorAttachments()[0];
+				texture->Bind(int(i) + offset);
 			}
 		}
 	}

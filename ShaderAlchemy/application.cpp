@@ -128,7 +128,7 @@ void Application::Init() {
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	preview_fb = new Framebuffer(int(window_size.x), int(window_size.y));
-	preview_fb->AddAttachment(Format::RGBA8);
+	preview_fb->AddAttachment(Format::RGBA8, true);
 	preview_fb->Resize(int(window_size.x), int(window_size.y));
 
 	{
@@ -503,7 +503,9 @@ void Application::Run() {
 			{
 				OnPreviewResized(int(avail.x), int(avail.y));
 			}
-			auto id = preview_fb->GetColorAttachments()[0]->GetID();
+
+			auto& [texture, is_draw] = preview_fb->GetColorAttachments()[0];
+			auto id = texture->GetID();
 			ImGui::Image(reinterpret_cast<void*>((unsigned long long)id), avail, { 0, 1 }, { 1, 0 });
 			
 		}
@@ -758,7 +760,8 @@ void Application::DrawAllPasses()
 	if (selectedRenderPass && selectedRenderPass->GetOutput())
 	{
 		preview_fb->Bind();
-		selectedRenderPass->GetOutput()->GetColorAttachments()[0]->Bind(0);
+		auto& [texture, is_draw] = selectedRenderPass->GetOutput()->GetColorAttachments()[0];
+		texture->Bind(0);
 		preview_shader->Bind();
 		DrawFullScreenQuad();
 	}
