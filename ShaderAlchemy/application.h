@@ -3,7 +3,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <imgui.h>
-#include "ImGuiTextColorEditor.h"
 
 #include <string>
 #include <filesystem>
@@ -12,30 +11,11 @@
 #include "JinGL/VertexInput.h"
 #include "JinGL/Framebuffer.h"
 #include "ImGuiConsole.h"
-
-enum class EditorPanelType 
-{
-	VertexShader,
-	FragmentShader
-};
-
-struct EditorPanel 
-{
-	TextEditor* editor = nullptr;
-	std::string name;
-// TODO: realy should this be here
-	EditorPanelType type{};
-	RenderPass* renderPass;
-	int undoIndexOnDisk{0};
-	void OnImGui();
-};
+#include "EditorPanel.h"
 
 struct Application
 {
-
 	static Application* instance;
-
-	static Application* Get() { return instance; }
 
 	GLFWwindow* window;
 	glm::vec2 window_size;
@@ -70,6 +50,8 @@ struct Application
 	std::filesystem::path screenshot_output_directory = "Output\\ScreenShots\\";
 	std::filesystem::path video_output_directory = "Output\\Videos\\";
 
+	static Application* Get() { return instance; }
+
 	void Init();
 	void Run();
 	void Shutdown();
@@ -96,4 +78,3 @@ struct Application
 	static void Log(const char* fmt, ...);
 };
 
-bool read_entire_file(const std::filesystem::path& path, std::string& string);

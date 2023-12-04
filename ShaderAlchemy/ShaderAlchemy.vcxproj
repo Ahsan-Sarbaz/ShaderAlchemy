@@ -131,7 +131,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="application.cpp" />
+    <ClCompile Include="Application.cpp" />
+    <ClCompile Include="EditorPanel.cpp" />
     <ClCompile Include="Geometry.cpp" />
     <ClCompile Include="ImGuiConsole.cpp" />
     <ClCompile Include="FullScreenRenderPass.cpp" />
@@ -150,9 +151,11 @@
     <ClCompile Include="RenderPass.cpp" />
     <ClCompile Include="ShaderProgramSource.cpp" />
     <ClCompile Include="stb_image.cpp" />
+    <ClCompile Include="Utils.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="application.h" />
+    <ClInclude Include="Application.h" />
+    <ClInclude Include="EditorPanel.h" />
     <ClInclude Include="Geometry.h" />
     <ClInclude Include="ImGuiConsole.h" />
     <ClInclude Include="FontAwesom6.h" />
@@ -170,6 +173,7 @@
     <ClInclude Include="ModelInputRenderPass.h" />
     <ClInclude Include="RenderPass.h" />
     <ClInclude Include="ShaderProgramSource.h" />
+    <ClInclude Include="Utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

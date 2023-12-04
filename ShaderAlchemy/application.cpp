@@ -1,21 +1,15 @@
-#include "application.h"
+#include "Application.h"
 
-#include <fstream>
-#include <sstream>
+#include "JinGL/Debug.h"
+
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include "FontAwesom6.h"
-#include <iomanip>
-#include <ctime>
-#include <algorithm>
-#include <array>
-
-#include "JinGL/Debug.h"
 
 #include "FullScreenRenderPass.h"
 #include "ModelInputRenderPass.h"
-#include <regex>
+#include "Utils.h"
 
 extern "C" {
 	__declspec(dllexport) int NvOptimusEnablement = 1;
@@ -23,19 +17,6 @@ extern "C" {
 }
 
 Application* Application::instance = nullptr;
-
-
-bool read_entire_file(const std::filesystem::path& path, std::string& string) 
-{
-	std::ifstream file (path);
-
-	if (!file.is_open()) return false;
-
-	std::stringstream ss;
-	ss << file.rdbuf();
-	string = std::move(ss.str());
-	return true;
-}
 
 void Application::Init() {
 
@@ -103,7 +84,7 @@ void Application::Init() {
 	ImGui::StyleColorsDark();
 
 	// TODO: make this be relative to the display size
-	float fontSize = 30.0f;
+	float fontSize = 24.0f;
 	io.Fonts->AddFontFromFileTTF("Fonts\\FiraCode-VariableFont_wght.ttf", fontSize);
 
 	float baseFontSize = fontSize; // 13.0f is the size of the default font. Change to the font size you use.
@@ -588,76 +569,6 @@ void Application::Shutdown()
 {
 	glfwDestroyWindow(window);
 	glfwTerminate();
-}
-
-void EditorPanel::OnImGui()
-{
-	if (ImGui::Begin(name.c_str(), 0, undoIndexOnDisk != editor->GetUndoIndex() ? ImGuiWindowFlags_UnsavedDocument : 0)) {
-		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S))
-		{
-			auto shader = renderPass->GetShader();
-
-			if (type == EditorPanelType::VertexShader)
-			{
-				auto source = editor->GetText();
-				auto vs = new Shader(ShaderType::Vertex, source);
-				shader->AttachShader(vs);
-				shader->SetVertexSource(source);
-			}
-			else if (type == EditorPanelType::FragmentShader)
-			{
-				auto source = editor->GetText();
-				auto fs = new Shader(ShaderType::Fragment, source);
-				shader->AttachShader(fs);
-				shader->SetFragmentSource(source);
-			}
-
-			char* infoLog;
-
-			if (!shader->Link(&infoLog, nullptr))
-			{
-				std::vector<std::string> errors;
-				char* token = strtok(infoLog, "\n");
-				while (token != NULL)
-				{
-					if (std::regex_search(std::string(token), std::regex(R"(((ERROR: \d:\d*:) | (\s*:\s*error)))")))
-						errors.emplace_back(std::string(token));
-					token = strtok(NULL, "\n");
-				}
-				
-				delete[] infoLog;
-
-				std::map<int, std::string> errorMarkers;
-				for (auto& error : errors)
-				{
-					std::string expression = R"((?::|\()\d*(?::|\)))";
-					auto regexp = std::regex(expression);
-					std::smatch match;
-					std::regex_search(error, match, regexp);
-					regexp = std::regex(R"(\d+)");
-					auto line = match[0].str();
-					std::smatch match2;
-					std::regex_search(line, match2, regexp);
-					line = match2[0].str();
-					int num = std::stoi(line);
-					auto newError = std::regex_replace(error, std::regex(expression), (":" + std::to_string(num) + ":"));
-					
-					errorMarkers.insert(std::make_pair<int, std::string>(int(num), std::string(newError)));
-					Application::instance->console->AddLog("%s\n", newError.c_str());
-				}
-
-				editor->SetErrorMarkers(errorMarkers);
-			}
-			else
-			{
-				editor->SetErrorMarkers({});
-			}
-
-			undoIndexOnDisk = editor->GetUndoIndex();
-		}
-		editor->Render((name + "Editor").c_str());
-	}
-	ImGui::End();
 }
 
 void Application::CreateEditorPanel(const std::filesystem::path& path)

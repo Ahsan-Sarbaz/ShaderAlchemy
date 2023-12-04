@@ -1,5 +1,7 @@
 #include "FullScreenRenderPass.h"
-#include "application.h"
+#include "Application.h"
+#include "Utils.h"
+
 #include <glm/gtc/type_ptr.hpp>
 
 void FullScreenRenderPass::Init()
