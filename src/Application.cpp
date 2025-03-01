@@ -420,7 +420,7 @@ void Application::Run() {
 		{
 			if (ImGui::BeginMenuBar())
 			{
-				ImGui::Text(ICON_FA_CLOCK " %.2f        " ICON_FA_FILM " %u        FPS %u", time, frames, fps);
+				ImGui::Text(ICON_FA_CLOCK " %.2f        " ICON_FA_FILM " %llu        FPS %llu", time, frames, fps);
 				ImGui::EndMenuBar();
 			}
 			ImGui::End();
@@ -487,7 +487,7 @@ void Application::Run() {
 
 			auto& [texture, is_draw] = preview_fb->GetColorAttachments()[0];
 			auto id = texture->GetID();
-			ImGui::Image(reinterpret_cast<void*>((unsigned long long)id), avail, { 0, 1 }, { 1, 0 });
+			ImGui::Image((ImTextureID)id, avail, { 0, 1 }, { 1, 0 });
 			
 		}
 		ImGui::End();
@@ -590,7 +590,8 @@ void Application::CreateEditorPanel(RenderPass* renderPass)
 	{
 		auto ep = new EditorPanel;
 		ep->editor = new TextEditor;
-		ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinition::Glsl());
+		ep->editor->SetLanguage(TextEditor::Language::Glsl());
+		// ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinition::Glsl());
 		ep->editor->SetText(shader->GetVertexSource());
 		ep->name = shader->GetName() + " [VS]";
 		ep->renderPass = renderPass;
@@ -601,7 +602,8 @@ void Application::CreateEditorPanel(RenderPass* renderPass)
 	{
 		auto ep = new EditorPanel;
 		ep->editor = new TextEditor;
-		ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinition::Glsl());
+		ep->editor->SetLanguage(TextEditor::Language::Glsl());
+		// ep->editor->SetLanguageDefinition(TextEditor::LanguageDefinition::Glsl());
 		ep->editor->SetText(shader->GetFragmentSource());
 		ep->name = shader->GetName() + " [FS]";
 		ep->renderPass = renderPass;

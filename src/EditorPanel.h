@@ -1,5 +1,5 @@
 #pragma once
-#include "ImGuiTextColorEditor.h"
+#include "TextEditor.h"
 #include "RenderPass.h"
 
 enum class EditorPanelType

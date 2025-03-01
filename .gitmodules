@@ -1,3 +1,3 @@
 [submodule "ShaderAlchemy/JinGL"]
-	path = ShaderAlchemy/JinGL
+	path = src/JinGL
 	url = https://github.com/Ahsan-Sarbaz/JinGL

@@ -1,5 +1,8 @@
 #include "EditorPanel.h"
-#include "application.h"
+#include "Application.h"
+#include <cstdio>
+#include <map>
+#include <regex>
 
 void EditorPanel::OnImGui()
 {
@@ -38,7 +41,6 @@ void EditorPanel::OnImGui()
 
 				delete[] infoLog;
 
-				std::map<int, std::string> errorMarkers;
 				for (auto& error : errors)
 				{
 					std::string expression = R"((?::|\()\d*(?::|\)))";
@@ -53,15 +55,17 @@ void EditorPanel::OnImGui()
 					int num = std::stoi(line);
 					auto newError = std::regex_replace(error, std::regex(expression), (":" + std::to_string(num) + ":"));
 
-					errorMarkers.insert(std::make_pair<int, std::string>(int(num), std::string(newError)));
 					Application::instance->console->AddLog("%s\n", newError.c_str());
+					editor->AddMarker(num, IM_COL32(255, 0, 0, 255), IM_COL32(0, 0, 0, 255), "", newError.c_str());
 				}
+				
 
-				editor->SetErrorMarkers(errorMarkers);
+				// editor->SetErrorMarkers(errorMarkers);
 			}
 			else
 			{
-				editor->SetErrorMarkers({});
+				editor->ClearMarkers();
+				// editor->SetErrorMarkers({});
 			}
 
 			undoIndexOnDisk = editor->GetUndoIndex();

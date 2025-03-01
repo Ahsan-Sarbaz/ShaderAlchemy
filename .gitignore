@@ -368,3 +368,6 @@ ShaderAlchemy/ffmpeg_bin/*.exe
 ShaderAlchemy/Models/
 ShaderAlchemy/docs_modified/
 ShaderAlchemy/DoxyFile
+
+build
+ffmpeg_bin

@@ -4,6 +4,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <imgui.h>
 
 void ModelInputRenderPass::Init()
 {
@@ -87,7 +88,7 @@ void ModelInputRenderPass::Draw()
 
 		float resolution[3] = { float(output->GetWidth()), float(output->GetHeight()) , 0.0f };
 		float mouseInput[4] = { app->mouse_position.x, app->mouse_position.y,
-			app->mouse_left_button, app->mouse_right_button };
+			app->mouse_left_button ? 1.0f : 0.0f, app->mouse_right_button ? 1.0f : 0.0f };
 
 		{
 			float channelResolutions[16 * 3] = {};
@@ -224,7 +225,7 @@ void ModelInputRenderPass::OnImGui()
 
 		for (size_t i = 0; i < model->meshes.size(); i++)
 		{
-			if (ImGui::TreeNode((void*)(model + i), "Mesh %d", i + 1))
+			if (ImGui::TreeNode((void*)(model + i), "Mesh %d", (int)(i + 1)))
 			{
 				auto& mesh = model->meshes[i];
 
@@ -245,9 +246,9 @@ void ModelInputRenderPass::OnImGui()
 				{
 					if (mesh.textures[j] != nullptr)
 					{
-						ImGui::Text(names[j]);
+						ImGui::Text("%s", names[j]);
 						auto id = mesh.textures[j]->GetID();
-						ImGui::Image(reinterpret_cast<void*>((unsigned long long)(id)), size, { 0, 1 }, { 1, 0 });
+						ImGui::Image(((ImTextureID)(id)), size, { 0, 1 }, { 1, 0 });
 					}
 				}
 
@@ -276,14 +277,14 @@ void ModelInputRenderPass::OnImGui()
 				sprintf_s(buff, "%sChannel%d%d", name.c_str(), i, int(this));
 				if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
 				{
-					is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)(channel->texture->GetID())), size, { 0, 1 }, { 1, 0 });
+					is_image_clicked = ImGui::ImageButton(buff, ((ImTextureID)(channel->texture->GetID())), size, { 0, 1 }, { 1, 0 });
 				}
 				else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
 				{
 					auto& [texture, is_draw] = channel->pass->GetOutput()->GetColorAttachments()[0];
 					auto id = texture->GetID();
 					is_image_clicked = ImGui::ImageButton(buff,
-						reinterpret_cast<void*>((unsigned long long)(id)), size, { 0, 1 }, { 1, 0 });
+						((ImTextureID)(id)), size, { 0, 1 }, { 1, 0 });
 				}
 				else
 				{

@@ -53,7 +53,7 @@ void FullScreenRenderPass::Draw()
 
 		float resolution[3] = { float(output->GetWidth()), float(output->GetHeight()) , 0.0f };
 		float mouseInput[4] = { app->mouse_position.x, app->mouse_position.y,
-			app->mouse_left_button, app->mouse_right_button };
+			app->mouse_left_button ? 1.0f : 0.0f, app->mouse_right_button ? 1.0f : 0.0f };
 
 		{
 			float channelResolutions[16 * 3] = {};
@@ -110,10 +110,10 @@ void FullScreenRenderPass::OnImGui()
 		auto is_image_clicked = false;
 
 		char buff[128];
-		sprintf_s(buff, "%sChannel%d%d", name.c_str(), i, int(this));
+		sprintf_s(buff, "%sChannel%d%llu", name.c_str(), i, this);
 		if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
 		{
-			is_image_clicked = ImGui::ImageButton(buff, reinterpret_cast<void*>((unsigned long long)
+			is_image_clicked = ImGui::ImageButton(buff, ((ImTextureID)
 				(channel->texture->GetID())), size, { 0, 1 }, { 1, 0 });
 		}
 		else if (channel && channel->type == ChannelType::RENDERPASS && channel->pass)
@@ -121,7 +121,7 @@ void FullScreenRenderPass::OnImGui()
 			auto& [texture, is_draw] = channel->pass->GetOutput()->GetColorAttachments()[0];
 			auto id = texture->GetID();
 			is_image_clicked = ImGui::ImageButton(buff,
-				reinterpret_cast<void*>((unsigned long long)(id)), size, { 0, 1 }, { 1, 0 });
+				((ImTextureID)(id)), size, { 0, 1 }, { 1, 0 });
 		}
 		else
 		{
