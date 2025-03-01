@@ -1,7 +1,6 @@
 #include "EditorPanel.h"
 #include "Application.h"
 #include <cstdio>
-#include <map>
 #include <regex>
 
 void EditorPanel::OnImGui()
