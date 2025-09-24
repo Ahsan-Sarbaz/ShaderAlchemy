@@ -371,3 +371,6 @@ ShaderAlchemy/DoxyFile
 
 build
 ffmpeg_bin
+*.exe
+Output
+

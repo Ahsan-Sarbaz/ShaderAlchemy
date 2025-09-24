@@ -110,7 +110,7 @@ void FullScreenRenderPass::OnImGui()
 		auto is_image_clicked = false;
 
 		char buff[128];
-		sprintf_s(buff, "%sChannel%d%llu", name.c_str(), i, this);
+		sprintf_s(buff, "%sChannel%d%llu", name.c_str(), i, (uint64_t)this);
 		if (channel && channel->type == ChannelType::EXTERNAL_IMAGE && channel->texture)
 		{
 			is_image_clicked = ImGui::ImageButton(buff, ((ImTextureID)
@@ -125,7 +125,8 @@ void FullScreenRenderPass::OnImGui()
 		}
 		else
 		{
-			is_image_clicked = ImGui::ImageButton(buff, 0, size);
+			ImTextureRef null_image(ImTextureID(0));
+			is_image_clicked = ImGui::ImageButton(buff, null_image, size);
 		}
 
 		if (is_image_clicked)

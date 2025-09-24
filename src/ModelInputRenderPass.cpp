@@ -172,7 +172,8 @@ void ModelInputRenderPass::OnImGui()
 	ImGui::PopID();
 
 	ImGui::SeparatorText("Model Input");
-	ImGui::Image(0, size);
+	ImTextureRef null_image(ImTextureID(0));
+	ImGui::Image(null_image, size);
 
 	if (ImGui::BeginDragDropTarget())
 	{
@@ -288,7 +289,7 @@ void ModelInputRenderPass::OnImGui()
 				}
 				else
 				{
-					is_image_clicked = ImGui::ImageButton(buff, 0, size);
+					is_image_clicked = ImGui::ImageButton(buff, null_image, size);
 				}
 
 				if (is_image_clicked)

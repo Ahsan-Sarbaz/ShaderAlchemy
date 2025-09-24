@@ -2,10 +2,9 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-#include <GL/glew.h>
 #include <execution>
 #include <sstream>
-#include <stb_image.h>
+#include "stb_image.h"
 #include "JinGL/TextureLoader.h"
 #include "JinGL/Buffer.h"
 #include <set>

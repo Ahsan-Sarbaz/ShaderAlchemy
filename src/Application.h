@@ -1,6 +1,5 @@
 #pragma once
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
+#include "JinGL/JinGL.h"
 #include <glm/glm.hpp>
 #include <imgui.h>
 
@@ -8,8 +7,6 @@
 #include <filesystem>
 
 #include "RenderPass.h"
-#include "JinGL/VertexInput.h"
-#include "JinGL/Framebuffer.h"
 #include "ImGuiConsole.h"
 #include "EditorPanel.h"
 
@@ -17,8 +14,7 @@ struct Application
 {
 	static Application* instance;
 
-	GLFWwindow* window;
-	glm::vec2 window_size;
+	Window* window;
 
 	bool running{};
 	bool playing{};
@@ -35,7 +31,9 @@ struct Application
 
 	std::vector<EditorPanel*> editors;
 	std::vector<RenderPass*> passes;
-	std::vector<std::string> drop_items;
+	std::vector<std::string> drop_items;	
+	std::vector<std::string> available_encoders;
+	int selected_encoder_index;
 
 	RenderPass* selectedRenderPass{};
 
@@ -70,10 +68,13 @@ struct Application
 	void OnWindowResize(int widht, int height);
 	void OnPreviewResized(int width, int height);
 
-	void OnRecord(int width, int height, int recording_time, int frame_rate, float speed);
+	void OnRecord(int width, int height, int recording_time,
+		int frame_rate, float speed,
+		const std::string& encoder);
+
 	void OnTakeScreenShot(int width, int height);
 
-	size_t GetPassCount() { return passes.size(); }
+	inline size_t GetPassCount() const { return passes.size(); }
 
 	static void Log(const char* fmt, ...);
 };

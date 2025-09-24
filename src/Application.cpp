@@ -1,6 +1,6 @@
 #include "Application.h"
 
-#include "JinGL/Debug.h"
+#include "JinGL/JinGL.h"
 
 #include <imgui_internal.h>
 #include <imgui_impl_glfw.h>
@@ -18,6 +18,65 @@ extern "C" {
 
 Application* Application::instance = nullptr;
 
+static std::string ExecCommand(const char* cmd) {
+	std::array<char, 128> buffer{};
+	std::string result;
+	FILE* pipe = _popen(cmd, "r");
+	if (!pipe) return result;
+	while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
+		result += buffer.data();
+	}
+	_pclose(pipe);
+	return result;
+}
+
+static bool TestEncoder(const std::string& encoder) {
+	// TODO: are the checks really failing because of encoder or options?
+	std::string cmd = "ffmpeg -hide_banner -f lavfi -i testsrc=duration=1:size=16x16:rate=1 "
+		"-c:v " + encoder + " -f null - 2>&1";
+	std::string output = ExecCommand(cmd.c_str());
+
+	if (output.find("Unknown encoder") != std::string::npos) return false;
+	if (output.find("Error") != std::string::npos) return false;
+
+	return true;
+}
+
+static std::string PickBestEncoder() {
+	if (TestEncoder("hevc_nvenc")) return "hevc_nvenc";
+	if (TestEncoder("h264_nvenc")) return "h264_nvenc";
+
+	if (TestEncoder("hevc_amf")) return "hevc_amf";
+	if (TestEncoder("h264_amf")) return "h264_amf";
+
+	if (TestEncoder("hevc_qsv")) return "hevc_qsv";
+	if (TestEncoder("h264_qsv")) return "h264_qsv";
+
+	return "libx264";
+}
+
+static std::vector<std::string> GetAvailableEncoders() {
+	std::vector<std::string> encoders;
+
+	// TODO: each encoder can have different capabilities and options
+	const char* candidates[] = {
+		"hevc_nvenc", "h264_nvenc",
+		"hevc_amf", "h264_amf",
+		"hevc_qsv", "h264_qsv",
+		"libx265",
+		"libx264"
+	};
+
+	for (auto& e : candidates) {
+		if (TestEncoder(e)) {
+			encoders.push_back(e);
+		}
+	}
+
+	return encoders;
+}
+
+
 void Application::Init() {
 
 	if (instance == nullptr)
@@ -30,46 +89,20 @@ void Application::Init() {
 		return;
 	}
 
-	if(glfwInit() != GLFW_TRUE) {
-		printf("Failed to init glfw\n");
-		return;
-	}
+	window = new Window(1920, 1080, "ShaderAlchemy");
 
-	window_size = {2560, 1440};
+	
+	glfwSetWindowUserPointer(window->GetHandle(), this);
 
-	const char* glsl_version = "#version 450";
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	window = glfwCreateWindow(
-		(int)window_size.x, (int)window_size.y,
-		"ShaderAlchemy",
-		nullptr, nullptr
-	);
-
-	glfwSetWindowUserPointer(window, this);
-
-	glfwSetFramebufferSizeCallback(window, [](GLFWwindow* window, int width, int height) {
+	glfwSetFramebufferSizeCallback(window->GetHandle(), [](GLFWwindow* window, int width, int height) {
 		Application::instance->OnWindowResize(width, height);
 	});
 
-	glfwSetDropCallback(window, [](GLFWwindow* window, int path_count, const char* paths[]) {
+	glfwSetDropCallback(window->GetHandle(), [](GLFWwindow* window, int path_count, const char* paths[]) {
 		Application::instance->OnDrop(path_count, paths);
 	});
 
-	if (window == nullptr) {
-		printf("Failed to create GLFWwindow\n");
-		return;
-	}
-
-	glfwSwapInterval(1);
-	glfwMakeContextCurrent(window);
-
-	if(glewInit() != GLEW_OK) {
-		printf("Failed to init GLEW\n");
-		return;
-	}
-
+	InitGL(glfwGetProcAddress);
 	EnableDebugMessages();
 
 	IMGUI_CHECKVERSION();
@@ -105,12 +138,13 @@ void Application::Init() {
 		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
 	}
 
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplGlfw_InitForOpenGL(window->GetHandle(), true);
+	const char* glsl_version = "#version 450";
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
-	preview_fb = new Framebuffer(int(window_size.x), int(window_size.y));
+	preview_fb = new Framebuffer(0, 0);
 	preview_fb->AddAttachment(Format::RGBA8, true);
-	preview_fb->Resize(int(window_size.x), int(window_size.y));
+	preview_fb->Resize(window->GetWidth(), window->GetHeight());
 
 	{
 		preview_shader = new ShaderProgram;
@@ -139,6 +173,9 @@ void Application::Init() {
 		std::filesystem::create_directories(video_output_directory);
 
 	console = new ImGuiConsole();
+
+	available_encoders = GetAvailableEncoders();
+	selected_encoder_index = 0; // default to first available
 
 	Run();
 	Shutdown();
@@ -207,10 +244,10 @@ void Application::Run() {
 
 	mouse_position = { 0, 0 };
 
-	while (!glfwWindowShouldClose(window) && running)
+	while (!window->IsClosed() && running)
 	{
-		auto this_frame_time = (float)glfwGetTime();
-		dt = this_frame_time - last_frame_time;
+		window->StartFrame();
+		auto dt = window->GetDeltaTime();
 		frameRate = 1.0f / dt;
 
 		if (playing)
@@ -227,18 +264,13 @@ void Application::Run() {
 			}
 		}
 
-		last_frame_time = this_frame_time;
-
-		glfwPollEvents();
-
-
 		{
-			mouse_left_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-			mouse_right_button = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+			mouse_left_button = glfwGetMouseButton(window->GetHandle(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+			mouse_right_button = glfwGetMouseButton(window->GetHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 			if (mouse_left_button)
 			{
 				double x, y;
-				glfwGetCursorPos(window, &x, &y);
+				glfwGetCursorPos(window->GetHandle(), &x, &y);
 				mouse_position = { float(x), float(y) };
 			}
 		}
@@ -339,6 +371,17 @@ void Application::Run() {
 				ImGui::SameLine();
 				ImGui::Combo("VideoFPS", &frame_rate_index, frame_rate_strings.data(), (int)frame_rate_strings.size());
 
+				if (!available_encoders.empty()) {
+					std::vector<const char*> encoder_names;
+					for (auto& e : available_encoders) {
+						encoder_names.push_back(e.c_str());
+					}
+					ImGui::Combo("Encoder", &selected_encoder_index,
+						encoder_names.data(),
+						(int)encoder_names.size());
+				}
+
+
 				if (resolution_index == (int)resolution_strings.size() - 1)
 				{
 					ImGui::InputInt("Width", &selected_resolution.x);
@@ -362,12 +405,16 @@ void Application::Run() {
 				ImGui::InputFloat("Video Speed", &recording_speed);
 				ImGui::Separator();
 
+
+
 				float button_size = 120;
 				ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x / 2) - (button_size) / 2);
 				if (ImGui::Button("Record", ImVec2(button_size, 0)))
 				{
-					OnRecord(selected_resolution.x, selected_resolution.y, 
-						recording_time_minutes * 60 + recording_time_seconds, selected_frame_rate, recording_speed);
+					OnRecord(selected_resolution.x, selected_resolution.y,
+						recording_time_minutes * 60 + recording_time_seconds,
+						selected_frame_rate, recording_speed,
+						available_encoders[selected_encoder_index]);
 				}
 
 				ImGui::EndPopup();
@@ -561,14 +608,13 @@ void Application::Run() {
 			glfwMakeContextCurrent(backup_current_context);
 		}
 
-		glfwSwapBuffers(window);
+		window->EndFrame();
 	}
 }
 
 void Application::Shutdown() 
 {
-	glfwDestroyWindow(window);
-	glfwTerminate();
+	delete window;
 }
 
 void Application::CreateEditorPanel(const std::filesystem::path& path)
@@ -704,7 +750,9 @@ void Application::OnPreviewResized(int width, int height)
 	preview_fb->Resize(width, height);
 }
 
-void Application::OnRecord(int width, int height, int recording_time, int frame_rate, float speed)
+void Application::OnRecord(int width, int height, int recording_time,
+	int frame_rate, float speed,
+	const std::string& encoder)
 {
 	auto last_preview_size = glm::ivec2{ preview_fb->GetWidth(), preview_fb->GetHeight()};
 
@@ -716,12 +764,16 @@ void Application::OnRecord(int width, int height, int recording_time, int frame_
 
 	auto ffmpeg_frames_to_write = recording_time * frame_rate;
 
+	printf_s("Encoder: %s\n", encoder.c_str());
+
 	std::stringstream ss;
-	ss << "ffmpeg_bin\\ffmpeg.exe -benchmark -hide_banner -an -r " << frame_rate << " -f rawvideo -pix_fmt rgba -s ";
-	ss << " " << width << "x" << height << " ";
-	ss << " -i - -c:v hevc_nvenc -y -pix_fmt yuv420p -vf vflip -preset losslesshp ";
-	ss << "\"" << video_output_directory << "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-") <<
-		width << "x" << height << "p" << ".mp4\"";
+
+	ss << "ffmpeg.exe -hide_banner -an -r " << frame_rate
+		<< " -f rawvideo -pix_fmt rgba -s " << width << "x" << height
+		<< " -i - -vf vflip -c:v " << encoder << " -y "
+		<< "\"" << video_output_directory
+		<< "Output-" << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S-")
+		<< width << "x" << height << "p" << ".mp4\"";
 	auto cmd = ss.str();
 
 	auto ffmpeg = _popen(cmd.c_str(), "wb");

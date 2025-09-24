@@ -1,3 +1,6 @@
 [submodule "ShaderAlchemy/JinGL"]
 	path = src/JinGL
 	url = https://github.com/Ahsan-Sarbaz/JinGL
+[submodule "ImGuiColorTextEdit"]
+	path = src/ImGuiColorTextEdit
+	url = https://github.com/goossens/ImGuiColorTextEdit.git

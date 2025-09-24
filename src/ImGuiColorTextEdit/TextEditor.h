@@ -40,7 +40,13 @@ public:
 	//
 
 	// access editor options
-	inline void SetTabSize(int value) { document.setTabSize(std::max(1, std::min(8, value))); }
+	inline void SetTabSize(int value) {
+		// this must be called before text is loaded/edited
+		if (document.isEmpty() && transactions.empty()) {
+			document.setTabSize(std::max(1, std::min(8, value)));
+		}
+	}
+
 	inline int GetTabSize() const { return document.getTabSize(); }
 	inline void SetLineSpacing(float value) { lineSpacing = std::max(1.0f, std::min(2.0f, value)); }
 	inline float GetLineSpacing() const { return lineSpacing; }
@@ -52,12 +58,19 @@ public:
 	inline bool IsShowWhitespacesEnabled() const { return showWhitespaces; }
 	inline void SetShowLineNumbersEnabled(bool value) { showLineNumbers = value; }
 	inline bool IsShowLineNumbersEnabled() const { return showLineNumbers; }
+	inline void SetShowScrollbarMiniMapEnabled(bool value) { showScrollbarMiniMap = value; }
+	inline bool IsShowScrollbarMiniMapEnabled() const { return showScrollbarMiniMap; }
+	inline void SetShowPanScrollIndicatorEnabled(bool value) { showPanScrollIndicator = value; }
+	inline bool IsShowPanScrollIndicatorEnabled() const { return showPanScrollIndicator; }
 	inline void SetShowMatchingBrackets(bool value) { showMatchingBrackets = value; showMatchingBracketsChanged = true; }
 	inline bool IsShowingMatchingBrackets() const { return showMatchingBrackets; }
 	inline void SetCompletePairedGlyphs(bool value) { completePairedGlyphs = value; }
 	inline bool IsCompletingPairedGlyphs() const { return completePairedGlyphs; }
 	inline void SetOverwriteEnabled(bool value) { overwrite = value; }
 	inline bool IsOverwriteEnabled() const { return overwrite; }
+	inline void SetMiddleMousePanMode() { panMode = true; }
+	inline void SetMiddleMouseScrollMode() { panMode = false; }
+	inline bool IsMiddleMousePanMode() const { return panMode; }
 
 	// access text (using UTF-8 encoded strings)
 	// (see note below on cursor and scroll manipulation after setting new text)
@@ -75,9 +88,10 @@ public:
 			document.normalizeCoordinate(Coordinate(endLine, endColumn)));
 	}
 
-	inline bool IsEmpty() const { return document.size() == 1 && document[0].size() == 0; }
-	inline int GetLineCount() const { return document.lineCount(); }
+	inline void ClearText() { SetText(""); }
 
+	inline bool IsEmpty() const { return document.isEmpty(); }
+	inline int GetLineCount() const { return document.lineCount(); }
 
 	// render the text editor in a Dear ImGui context
 	inline void Render(const char* title, const ImVec2& size=ImVec2(), bool border=false) { render(title, size, border); }
@@ -180,15 +194,17 @@ public:
 		int line; // zero-based
 		float width;
 		float height;
+		ImVec2 glyphSize;
 	};
 
+	// positive width is number of pixels, negative with is number of glyphs
 	inline void SetLineDecorator(float width, std::function<void(Decorator& decorator)> callback) {
 		decoratorWidth = width;
 		decoratorCallback = callback;
 	}
 
 	inline void ClearLineDecorator() { SetLineDecorator(0.0f, nullptr); }
-	inline bool HasLineDecorator() const { return decoratorWidth > 0.0f && decoratorCallback != nullptr; }
+	inline bool HasLineDecorator() const { return decoratorWidth != 0.0f && decoratorCallback != nullptr; }
 
 	// setup context menu callbacks (these are called when a user right clicks line numbers or somewhere in the text)
 	// the editor sets up the popup menus, the callback has to populate them
@@ -261,16 +277,16 @@ public:
 
 	// a single colored character (a glyph)
 	class Glyph {
-		public:
-			// constructors
-			Glyph() = default;
-			Glyph(ImWchar cp) : codepoint(cp) {}
-			Glyph(ImWchar cp, Color col) : codepoint(cp), color(col) {}
+	public:
+		// constructors
+		Glyph() = default;
+		Glyph(ImWchar cp) : codepoint(cp) {}
+		Glyph(ImWchar cp, Color col) : codepoint(cp), color(col) {}
 
-			// properties
-			ImWchar codepoint = 0;
-			Color color = Color::text;
-		};
+		// properties
+		ImWchar codepoint = 0;
+		Color color = Color::text;
+	};
 
 	// iterator used in language specific tokenizers
 	class Iterator {
@@ -384,7 +400,7 @@ public:
 	public:
 		static std::string_view::const_iterator skipBOM(std::string_view::const_iterator i, std::string_view::const_iterator end);
 		static std::string_view::const_iterator read(std::string_view::const_iterator i, std::string_view::const_iterator end, ImWchar* codepoint);
-		static size_t write(char* i, ImWchar codepoint); // must point to buffer of 4 character (returns number of characters written)
+		static size_t write(char* i, ImWchar codepoint); // must point to buffer of 4 characters (returns number of characters written)
 		static bool isLetter(ImWchar codepoint);
 		static bool isNumber(ImWchar codepoint);
 		static bool isWord(ImWchar codepoint);
@@ -395,9 +411,74 @@ public:
 		static bool isUpper(ImWchar codepoint);
 		static ImWchar toUpper(ImWchar codepoint);
 		static ImWchar toLower(ImWchar codepoint);
+
+		static constexpr ImWchar singleQuote = '\'';
+		static constexpr ImWchar doubleQuote = '"';
+		static constexpr ImWchar openCurlyBracket = '{';
+		static constexpr ImWchar closeCurlyBracket = '}';
+		static constexpr ImWchar openSquareBracket = '[';
+		static constexpr ImWchar closeSquareBracket = ']';
+		static constexpr ImWchar openParenthesis = '(';
+		static constexpr ImWchar closeParenthesis = ')';
+
+		static inline bool isPairOpener(ImWchar ch) {
+			return
+				ch == openCurlyBracket ||
+				ch == openSquareBracket ||
+				ch == openParenthesis ||
+				ch == singleQuote ||
+				ch == doubleQuote;
+		}
+
+		static inline bool isPairCloser(ImWchar ch) {
+			return
+				ch == closeCurlyBracket ||
+				ch == closeSquareBracket ||
+				ch == closeParenthesis ||
+				ch == singleQuote ||
+				ch == doubleQuote;
+		}
+
+		static inline ImWchar toPairCloser(ImWchar ch) {
+			return
+				(ch == openCurlyBracket) ? closeCurlyBracket :
+				(ch == openSquareBracket) ? closeSquareBracket :
+				(ch == openParenthesis) ? closeParenthesis:
+				ch;
+		}
+
+		static inline ImWchar toPairOpener(ImWchar ch) {
+			return
+				(ch == closeCurlyBracket) ? openCurlyBracket :
+				(ch == closeSquareBracket) ? openSquareBracket :
+				(ch == closeParenthesis) ? openParenthesis:
+				ch;
+		}
+
+		static inline bool isMatchingPair(ImWchar open, ImWchar close) {
+			return isPairOpener(open) && close == toPairCloser(open);
+		}
+
+		static inline bool isBracketOpener(ImWchar ch) {
+			return
+				ch == openCurlyBracket ||
+				ch == openSquareBracket ||
+				ch == openParenthesis;
+		}
+
+		static inline bool isBracketCloser(ImWchar ch) {
+			return
+				ch == closeCurlyBracket ||
+				ch == closeSquareBracket ||
+				ch == closeParenthesis;
+		}
+
+		static inline bool isMatchingBrackets(ImWchar open, ImWchar close) {
+			return isBracketOpener(open) && close == toPairCloser(open);
+		}
 	};
 
-private:
+protected:
 	//
 	// below is the private API
 	// private members (function and variables) start with a lowercase character
@@ -576,7 +657,7 @@ private:
 		State state = State::inText;
 
 		// marker reference (0 means no marker for this line)
-		size_t marker;
+		size_t marker = 0;
 
 		// width of this line (in visible columns)
 		int maxColumn = 0;
@@ -597,6 +678,7 @@ private:
 
 		// manipulate document text (strings should be UTF-8 encoded)
 		void setText(const std::string_view& text);
+		void setText(const std::vector<std::string_view>& text);
 		Coordinate insertText(Coordinate start, const std::string_view& text);
 		void deleteText(Coordinate start, Coordinate end);
 
@@ -605,6 +687,9 @@ private:
 		std::string getLineText(int line) const;
 		std::string getSectionText(Coordinate start, Coordinate end) const;
 		ImWchar getCodePoint(Coordinate location);
+
+		// see if document is empty
+		inline bool isEmpty() const { return size() == 1 && at(0).size() == 0; }
 
 		// get number of lines (as an int)
 		inline int lineCount() const { return static_cast<int>(size()); }
@@ -637,6 +722,7 @@ private:
 
 		// see if document was updated this frame (can only be called once)
 		inline bool isUpdated() { auto result = updated; updated = false; return result; }
+		inline void resetUpdated() { updated = false; }
 
 		// utility functions
 		bool isWholeWord(Coordinate start, Coordinate end) const;
@@ -704,10 +790,10 @@ private:
 		// add a transaction to the list, execute it and make it undoable
 		void add(std::shared_ptr<Transaction> transaction);
 
-		// undo the last transction
+		// undo the last transaction
 		void undo(Document& document, Cursors& cursors);
 
-		// redo the last undone transction;
+		// redo the last undone transaction;
 		void redo(Document& document, Cursors& cursors);
 
 		// get status information
@@ -735,7 +821,7 @@ private:
 		// see if string matches part of line
 		bool matches(Line::iterator start, Line::iterator end, const std::string_view& text);
 
-		// set color fofr specified range of glyphs
+		// set color for specified range of glyphs
 		inline void setColor(Line::iterator start, Line::iterator end, Color color) { while (start < end) (start++)->color = color; }
 	} colorizer;
 
@@ -774,16 +860,11 @@ private:
 				glyph.color == Color::matchingBracketLevel3 ||
 				glyph.color == Color::matchingBracketError;
 		}
-
-		static inline bool isBracketOpener(ImWchar ch) { return ch == '{' || ch == '[' || ch == '('; }
-		static inline bool isBracketCloser(ImWchar ch) { return ch == '}' || ch == ']' || ch == ')'; }
-		static inline ImWchar toBracketCloser(ImWchar ch) { return ch == '{' ? '}' : (ch == '[' ? ']' : (ch == '(' ? ')' : ch)); }
-		static inline ImWchar toBracketOpener(ImWchar ch) { return ch == '}' ? '{' : (ch == ']' ? '[' : (ch == ')' ? '(' : ch)); }
-		static inline bool isMatchingBrackets(ImWchar open, ImWchar close) { return isBracketOpener(open) && close == toBracketCloser(open); }
 	} bracketeer;
 
 	// access the editor's text
 	void setText(const std::string_view& text);
+	void clearText();
 
 	// render (parts of) the text editor
 	void render(const char* title, const ImVec2& size, bool border);
@@ -795,7 +876,9 @@ private:
 	void renderMargin();
 	void renderLineNumbers();
 	void renderDecorations();
-	void renderFindReplace(ImVec2 pos, ImVec2 available);
+	void renderScrollbarMiniMap();
+	void renderPanScrollIndicator();
+	void renderFindReplace(ImVec2 pos, float width);
 
 	// keyboard and mouse interactions
 	void handleKeyboardInputs();
@@ -902,6 +985,7 @@ private:
 	bool autoIndent = true;
 	bool showWhitespaces = true;
 	bool showLineNumbers = true;
+	bool showScrollbarMiniMap = true;
 	bool showMatchingBrackets = true;
 	bool completePairedGlyphs = true;
 	bool overwrite = false;
@@ -922,6 +1006,8 @@ private:
 	int visibleColumns;
 	int firstVisibleColumn;
 	int lastVisibleColumn;
+	float verticalScrollBarSize;
+	float horizontalScrollBarSize;
 	float cursorAnimationTimer = 0.0f;
 	bool ensureCursorIsVisible = false;
 	int scrollToLineNumber = -1;
@@ -959,6 +1045,11 @@ private:
 	float lastClickTime = -1.0f;
 	ImWchar completePairCloser = 0;
 	Coordinate completePairLocation;
+	bool panMode = true;
+	bool panning = false;
+	bool scrolling = false;
+	ImVec2 scrollStart;
+	bool showPanScrollIndicator = true;
 
 	// color palette support
 	void updatePalette();
